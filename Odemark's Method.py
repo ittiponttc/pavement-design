@@ -1,19 +1,5 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-
-# ตั้งค่าหน้าเว็บ
-st.set_page_config(
-    page_title="Odemark Calculator",
-    page_icon="🛣️",
-    layout="wide"
-)
-
-# หัวข้อหลัก
-st.title("🛣️ Odemark's Method Calculator")
-st.subheader("การคำนวณความหนาเทียบเท่า (Equivalent Thickness) สำหรับโครงสร้างชั้นทาง")
-
-st.markdown("---")
+st.title("สำหรับการออกแบบโครงสร้างชั้นทาง (Pavement Design)")
+st.subheader("Odemark's Method of Equivalent Thickness Calculator")
 
 # Sidebar สำหรับตั้งค่า
 st.sidebar.header("⚙️ ตั้งค่าพารามิเตอร์")
