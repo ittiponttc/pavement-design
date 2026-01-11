@@ -1,13 +1,10 @@
-"""
-Odemark's Method of Equivalent Thickness Calculator
-สำหรับการออกแบบโครงสร้างชั้นทาง (Pavement Design)
-พัฒนาสำหรับงานวิศวกรรมโยธา
 
-Developed by: รศ.ดร.อิทธิพลมีผล
+import streamlit as st ("Odemark's Method of Equivalent Thickness Calculator")
+mport streamlit as st ("สำหรับการออกแบบโครงสร้างชั้นทาง (Pavement Design)")
+
+
+mport streamlit as st ("Developed by: รศ.ดร.อิทธิพล มีผล")
 Reference: AASHTO 1993, Layered Elastic Theory
-"""
-
-import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
