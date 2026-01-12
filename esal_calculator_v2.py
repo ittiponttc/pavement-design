@@ -7,7 +7,6 @@ ESAL Calculator - AASHTO 1993
 import streamlit as st
 import pandas as pd
 import math
-from io import BytesIO
 
 # ============================================================
 # ค่าคงที่
@@ -65,18 +64,16 @@ def calc_truck_factor(axles, pavement_type, pt, param):
 # ฟังก์ชันช่วย
 # ============================================================
 def create_template():
-    """สร้าง Template Excel"""
+    """สร้าง Template"""
     base = {'MB': 120, 'HB': 60, 'MT': 250, 'HT': 180, 'STR': 120, 'TR': 100}
     data = {'Year': list(range(1, 21))}
     for code, val in base.items():
         data[code] = [int(val * (1.045 ** i)) for i in range(20)]
     return pd.DataFrame(data)
 
-def to_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
-    return output.getvalue()
+def to_csv(df):
+    """แปลง DataFrame เป็น CSV"""
+    return df.to_csv(index=False).encode('utf-8-sig')
 
 def calculate_esal(traffic_df, truck_factors, lane_factor, direction_factor):
     """คำนวณ ESAL"""
@@ -143,8 +140,8 @@ def main():
         direction_factor = st.slider("Direction Factor", 0.5, 1.0, 1.0, 0.1)
         
         st.divider()
-        st.download_button("📄 ดาวน์โหลด Template", to_excel(create_template()),
-            "traffic_template.xlsx", use_container_width=True)
+        st.download_button("📄 ดาวน์โหลด Template (CSV)", to_csv(create_template()),
+            "traffic_template.csv", "text/csv", use_container_width=True)
     
     # Main Tabs
     tab1, tab2, tab3 = st.tabs(["📊 คำนวณ ESAL", "🚛 ตั้งค่าน้ำหนักเพลา", "📘 คู่มือ"])
@@ -272,14 +269,14 @@ def main():
         with col1:
             st.subheader("📤 อัพโหลดข้อมูล")
             
-            uploaded_file = st.file_uploader("เลือกไฟล์ Excel", type=['xlsx', 'xls'])
+            uploaded_file = st.file_uploader("เลือกไฟล์ CSV", type=['csv'])
             
             if 'use_sample' not in st.session_state:
                 st.session_state.use_sample = False
             
             if uploaded_file:
                 try:
-                    traffic_df = pd.read_excel(uploaded_file)
+                    traffic_df = pd.read_csv(uploaded_file)
                     st.success("✅ อัพโหลดสำเร็จ!")
                     st.session_state.use_sample = False
                 except Exception as e:
@@ -328,21 +325,9 @@ def main():
                 st.write("**📊 ESAL รายปี:**")
                 st.dataframe(results_df, use_container_width=True, height=400)
                 
-                # Download
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    pd.DataFrame([{'รายการ': k, 'ค่า': v} for k, v in {
-                        'ผิวทาง': 'Rigid' if pavement_type == 'rigid' else 'Flexible',
-                        'pt': pt, 'พารามิเตอร์': param_label,
-                        'Lane Factor': lane_factor, 'Direction Factor': direction_factor,
-                        'ESAL รวม': f"{total_esal:,.0f}"
-                    }.items()]).to_excel(writer, sheet_name='Summary', index=False)
-                    pd.DataFrame(tf_data).to_excel(writer, sheet_name='Truck Factors', index=False)
-                    results_df.to_excel(writer, sheet_name='ESAL', index=False)
-                    traffic_df.to_excel(writer, sheet_name='Input', index=False)
-                
-                st.download_button("📥 ดาวน์โหลดผลลัพธ์", output.getvalue(),
-                    f"ESAL_{pavement_type}_{param}.xlsx", use_container_width=True)
+                # Download CSV
+                st.download_button("📥 ดาวน์โหลดผลลัพธ์ (CSV)", to_csv(results_df),
+                    f"ESAL_{pavement_type}_{param}.csv", "text/csv", use_container_width=True)
             else:
                 st.info("⬅️ กรุณาอัพโหลดข้อมูลหรือใช้ข้อมูลตัวอย่าง")
     
@@ -355,10 +340,10 @@ def main():
         ### วิธีใช้งาน
         1. **ตั้งค่าน้ำหนักเพลา** (Tab 🚛) - กำหนดน้ำหนักและชนิดเพลาสำหรับรถแต่ละประเภท
         2. **ตั้งค่าพารามิเตอร์** (Sidebar) - เลือก Rigid/Flexible, pt, D/SN
-        3. **อัพโหลดข้อมูล** (Tab 📊) - อัพโหลด Excel ปริมาณจราจรรายปี
-        4. **ดาวน์โหลดผลลัพธ์** - บันทึกเป็นไฟล์ Excel
+        3. **อัพโหลดข้อมูล** (Tab 📊) - อัพโหลด Excel/CSV ปริมาณจราจรรายปี
+        4. **ดาวน์โหลดผลลัพธ์** - บันทึกเป็นไฟล์ CSV
         
-        ### รูปแบบไฟล์ Excel
+        ### รูปแบบไฟล์
         | Year | MB | HB | MT | HT | STR | TR |
         |------|----|----|----|----|-----|-----|
         | 1 | 120 | 60 | 250 | 180 | 120 | 100 |
