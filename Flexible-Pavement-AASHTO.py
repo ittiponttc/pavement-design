@@ -3,6 +3,7 @@ import numpy as np
 import math
 import pandas as pd
 
+# ===== ADD HERE =====
 MATERIAL_LIBRARY = {
     "Surface Course": {
         "Asphalt Concrete (Dense-graded)": {"a": 0.42, "m": 1.00},
@@ -17,6 +18,8 @@ MATERIAL_LIBRARY = {
         "Granular Subbase": {"a": 0.11, "m": 1.00},
         "Sand / Sandy Gravel": {"a": 0.08, "m": 1.00},
     }
+}
+# =====================
 
 
 def bisection_method(func, a, b, tol=1e-6, max_iter=100):
