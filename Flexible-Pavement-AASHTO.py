@@ -424,6 +424,38 @@ with col2:
 st.markdown("---")
 st.subheader("🏗️ โครงสร้างชั้นทาง")
 
++st.markdown("### 🧱 เลือกวัสดุและพารามิเตอร์แต่ละชั้น")
++
++rows = []
++default_thickness = {
++    "Surface Course": 4.0,
++    "Base Course": 6.0,
++    "Subbase Course": 6.0
++}
++
++for layer, mats in MATERIAL_LIBRARY.items():
++    mat = st.selectbox(layer, list(mats.keys()), key=f"mat_{layer}")
++    rows.append({
++        "Layer": layer,
++        "Material": mat,
++        "a": mats[mat]["a"],
++        "D (inch)": default_thickness[layer],
++        "m": mats[mat]["m"]
++    })
++
++df_layers = st.data_editor(
++    pd.DataFrame(rows),
++    hide_index=True,
++    use_container_width=True,
++    column_config={
++        "Layer": st.column_config.TextColumn(disabled=True),
++        "Material": st.column_config.TextColumn(disabled=True),
++        "a": st.column_config.NumberColumn(format="%.2f"),
++        "D (inch)": st.column_config.NumberColumn(format="%.1f"),
++        "m": st.column_config.NumberColumn(format="%.2f"),
++    }
++)
+
 structure_mode = st.radio(
     "โหมดการออกแบบ",
     ["คำนวณ SN ที่ต้องการ แล้วออกแบบความหนา", "กำหนดความหนาเอง แล้วตรวจสอบ SN"],
