@@ -339,39 +339,6 @@ pt = st.sidebar.slider(
 )
 delta_PSI = Pi - pt
 
-# Layer Coefficients
-st.sidebar.subheader("🔧 Layer Coefficients")
-
-a1 = st.sidebar.slider(
-    "a₁ - Surface Course (AC)",
-    min_value=0.30, max_value=0.50, value=0.42, step=0.01,
-    help="ค่าสัมประสิทธิ์ชั้นผิวทาง (AC)"
-)
-
-a2 = st.sidebar.slider(
-    "a₂ - Base Course",
-    min_value=0.10, max_value=0.40, value=0.14, step=0.01,
-    help="ค่าสัมประสิทธิ์ชั้นพื้นทาง"
-)
-
-a3 = st.sidebar.slider(
-    "a₃ - Subbase Course",
-    min_value=0.05, max_value=0.20, value=0.11, step=0.01,
-    help="ค่าสัมประสิทธิ์ชั้นรองพื้นทาง"
-)
-
-# Drainage Coefficients
-st.sidebar.subheader("💧 Drainage Coefficients")
-m2 = st.sidebar.slider(
-    "m₂ - Base Course",
-    min_value=0.40, max_value=1.40, value=1.00, step=0.05,
-    help="ค่าสัมประสิทธิ์การระบายน้ำชั้นพื้นทาง"
-)
-m3 = st.sidebar.slider(
-    "m₃ - Subbase Course",
-    min_value=0.40, max_value=1.40, value=1.00, step=0.05,
-    help="ค่าสัมประสิทธิ์การระบายน้ำชั้นรองพื้นทาง"
-)
 
 # Main content
 col1, col2 = st.columns(2)
