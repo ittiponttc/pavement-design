@@ -82,12 +82,15 @@ def calculate_esal(traffic_df, truck_factors, lane_factor, direction_factor):
     
     for idx, row in traffic_df.iterrows():
         year = row.get('Year', idx + 1)
-        year_data = {'ปีที่': year}
+        year_data = {'ปีที่': int(year) if pd.notna(year) else idx + 1}
         year_esal = 0
         
         for code, tf in truck_factors.items():
             if code in traffic_df.columns:
-                aadt = row[code]
+                try:
+                    aadt = float(row[code]) if pd.notna(row[code]) else 0
+                except:
+                    aadt = 0
                 esal = aadt * tf * lane_factor * direction_factor * 365
                 year_data[code] = f"{esal:,.0f}"
                 year_esal += esal
