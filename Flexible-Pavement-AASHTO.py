@@ -161,8 +161,8 @@ def calculate_SN(layers):
             'layer': i + 1,
             'name': layer.get('name', f'Layer {i+1}'),
             'a': a,
-            'D_inch': D,
-            'D_cm': D * 2.54,
+            'D_cm': D,
+            'D_inch': D / 2.54,
             'm': m,
             'SN_layer': SN_layer,
         })
