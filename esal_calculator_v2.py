@@ -68,12 +68,25 @@ def calc_truck_factor(axles, pavement_type, pt, param):
     for load_ton, axle_type in axles:
         if load_ton > 0:
             Lx_kip = load_ton * TON_TO_KIP
-            L2 = AXLE_TYPES[axle_type]
+            L2 = AXLE_TYPES.get(axle_type, 1)  # default to Single if not found
             if pavement_type == 'rigid':
                 total += calc_ealf_rigid(Lx_kip, L2, pt, param)
             else:
                 total += calc_ealf_flexible(Lx_kip, L2, pt, param)
     return total
+
+def get_axles_from_truck(truck):
+    """ดึงข้อมูล axles จาก truck dict (รองรับทั้ง tuple และ list)"""
+    axles = []
+    for k, v in truck.items():
+        if k != 'desc':
+            # รองรับทั้ง tuple และ list (Streamlit อาจแปลง tuple เป็น list)
+            if isinstance(v, (tuple, list)) and len(v) >= 2:
+                load = v[0]
+                axle_type = v[1]
+                if load > 0:
+                    axles.append((load, axle_type))
+    return axles
 
 # ============================================================
 # ฟังก์ชันช่วย
@@ -103,15 +116,23 @@ def calculate_esal(traffic_df, truck_factors, lane_factor, direction_factor):
         year_esal = 0
         
         for code in truck_codes:
-            if code in traffic_df.columns and code in truck_factors:
+            # ตรวจสอบว่ามี column นี้ในไฟล์ CSV หรือไม่
+            if code in traffic_df.columns:
                 try:
                     aadt = float(row[code]) if pd.notna(row[code]) else 0
                 except:
                     aadt = 0
-                tf = truck_factors[code]
+                
+                # ตรวจสอบว่ามี truck factor หรือไม่
+                tf = truck_factors.get(code, 0)
+                
+                # คำนวณ ESAL
                 esal = aadt * tf * lane_factor * direction_factor * 365
-                year_data[code] = esal  # เก็บเป็นตัวเลข
+                year_data[code] = esal
                 year_esal += esal
+            else:
+                # ถ้าไม่มี column ให้ใส่ 0
+                year_data[code] = 0
         
         year_data['ESAL รวม'] = year_esal
         total_esal += year_esal
@@ -256,9 +277,9 @@ def main():
         
         tf_data = []
         for code, truck in st.session_state.trucks.items():
-            axles = [(v[0], v[1]) for k, v in truck.items() if k != 'desc' and isinstance(v, tuple)]
+            axles = get_axles_from_truck(truck)
             tf = calc_truck_factor(axles, pavement_type, pt, param)
-            axle_info = " + ".join([f"{v[0]}t({v[1]})" for k, v in truck.items() if k != 'desc' and isinstance(v, tuple)])
+            axle_info = " + ".join([f"{a[0]}t({a[1]})" for a in axles])
             tf_data.append({'รหัส': code, 'ประเภท': truck['desc'], 'เพลา': axle_info, 'Truck Factor': f"{tf:.4f}"})
         
         st.dataframe(pd.DataFrame(tf_data), use_container_width=True, hide_index=True)
@@ -298,9 +319,10 @@ def main():
             st.subheader("📈 ผลการคำนวณ")
             
             if traffic_df is not None:
+                # คำนวณ Truck Factor
                 truck_factors = {}
                 for code, truck in st.session_state.trucks.items():
-                    axles = [(v[0], v[1]) for k, v in truck.items() if k != 'desc' and isinstance(v, tuple)]
+                    axles = get_axles_from_truck(truck)
                     truck_factors[code] = calc_truck_factor(axles, pavement_type, pt, param)
                 
                 results_df, total_esal = calculate_esal(traffic_df, truck_factors, lane_factor, direction_factor)
