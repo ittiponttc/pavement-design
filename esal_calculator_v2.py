@@ -186,7 +186,106 @@ def main():
             "traffic_template.csv", "text/csv", use_container_width=True)
     
     # Main Tabs
-    tab1, tab2, tab3 = st.tabs(["📊 คำนวณ ESAL", "🚛 ตั้งค่าน้ำหนักเพลา", "📘 คู่มือ"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 คำนวณ ESAL", "🚛 ตั้งค่าน้ำหนักเพลา", "🔢 คำนวณ TF (Custom)", "📘 คู่มือ"])
+    
+    # Tab 3: คำนวณ Truck Factor แบบ Custom
+    with tab3:
+        st.subheader("🔢 คำนวณ Truck Factor แบบกำหนดเอง")
+        st.markdown("*กำหนดจำนวนเพลา น้ำหนัก และชนิดเพลาได้ตามต้องการ*")
+        
+        col_param, col_result = st.columns([1, 1])
+        
+        with col_param:
+            st.write("**⚙️ พารามิเตอร์การคำนวณ**")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                custom_pavement = st.selectbox("ประเภทผิวทาง##custom", ['rigid', 'flexible'],
+                    format_func=lambda x: '🧱 Rigid' if x == 'rigid' else '🛤️ Flexible', key="custom_pavement")
+            with c2:
+                custom_pt = st.selectbox("pt##custom", [2.0, 2.5, 3.0], index=1, key="custom_pt")
+            
+            if custom_pavement == 'rigid':
+                custom_param = st.selectbox("ความหนา D (นิ้ว)##custom", [10, 11, 12, 13, 14], key="custom_D")
+            else:
+                custom_param = st.selectbox("Structural Number (SN)##custom", [4, 5, 6, 7], key="custom_SN")
+            
+            st.divider()
+            st.write("**🚛 กำหนดข้อมูลเพลา**")
+            
+            num_axles = st.number_input("จำนวนเพลา", 1, 6, 2, key="num_axles")
+            
+            # Initialize custom axles in session state
+            if 'custom_axles' not in st.session_state:
+                st.session_state.custom_axles = [(0.0, 'Single') for _ in range(6)]
+            
+            custom_axles = []
+            for i in range(int(num_axles)):
+                st.write(f"**เพลาที่ {i+1}**")
+                c1, c2 = st.columns(2)
+                with c1:
+                    load = st.number_input(f"น้ำหนัก (ตัน)##axle_{i}", 0.0, 100.0, 
+                        st.session_state.custom_axles[i][0] if i < len(st.session_state.custom_axles) else 0.0, 
+                        0.1, key=f"custom_load_{i}")
+                with c2:
+                    axle_type = st.selectbox(f"ชนิดเพลา##axle_{i}", list(AXLE_TYPES.keys()),
+                        key=f"custom_type_{i}")
+                custom_axles.append((load, axle_type))
+            
+            # Update session state
+            st.session_state.custom_axles = custom_axles + [(0.0, 'Single')] * (6 - len(custom_axles))
+        
+        with col_result:
+            st.write("**📊 ผลการคำนวณ**")
+            
+            # คำนวณ EALF แต่ละเพลา
+            ealf_data = []
+            total_tf = 0
+            
+            for i, (load, axle_type) in enumerate(custom_axles):
+                if load > 0:
+                    Lx_kip = load * TON_TO_KIP
+                    L2 = AXLE_TYPES[axle_type]
+                    
+                    if custom_pavement == 'rigid':
+                        ealf = calc_ealf_rigid(Lx_kip, L2, custom_pt, custom_param)
+                    else:
+                        ealf = calc_ealf_flexible(Lx_kip, L2, custom_pt, custom_param)
+                    
+                    total_tf += ealf
+                    ealf_data.append({
+                        'เพลาที่': i + 1,
+                        'น้ำหนัก (ตัน)': f"{load:.2f}",
+                        'น้ำหนัก (kip)': f"{Lx_kip:.3f}",
+                        'ชนิด': axle_type,
+                        'L₂': L2,
+                        'EALF': f"{ealf:.6f}"
+                    })
+            
+            if ealf_data:
+                st.dataframe(pd.DataFrame(ealf_data), use_container_width=True, hide_index=True)
+                
+                st.divider()
+                
+                # แสดง Truck Factor
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #1E3A5F, #4A6FA5); padding: 1.5rem; border-radius: 10px; text-align: center; color: white;">
+                    <div style="font-size: 0.9rem; opacity: 0.9;">Truck Factor</div>
+                    <div style="font-size: 2.5rem; font-weight: bold;">{total_tf:.4f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.divider()
+                
+                # แสดงสูตรที่ใช้
+                if custom_pavement == 'rigid':
+                    st.info(f"**พารามิเตอร์:** Rigid Pavement, D = {custom_param} นิ้ว, pt = {custom_pt}")
+                    st.latex(r"\log\left(\frac{W_{tx}}{W_{t18}}\right) = 4.62\log(19) - 4.62\log(L_x+L_2) + 3.28\log(L_2) + \frac{G_t}{\beta_x} - \frac{G_t}{\beta_{18}}")
+                else:
+                    st.info(f"**พารามิเตอร์:** Flexible Pavement, SN = {custom_param}, pt = {custom_pt}")
+                    st.latex(r"\log\left(\frac{W_{tx}}{W_{t18}}\right) = 4.79\log(19) - 4.79\log(L_x+L_2) + 4.33\log(L_2) + \frac{G_t}{\beta_x} - \frac{G_t}{\beta_{18}}")
+            else:
+                st.warning("⚠️ กรุณากรอกน้ำหนักเพลาอย่างน้อย 1 เพลา")
     
     # Tab 2: ตั้งค่าน้ำหนักเพลา
     with tab2:
@@ -356,8 +455,8 @@ def main():
             else:
                 st.info("⬅️ กรุณาอัพโหลดข้อมูลหรือใช้ข้อมูลตัวอย่าง")
     
-    # Tab 3: คู่มือ
-    with tab3:
+    # Tab 4: คู่มือ
+    with tab4:
         st.subheader("📘 คู่มือการใช้งาน")
         st.markdown("""
         ### วิธีใช้งาน
