@@ -424,14 +424,14 @@ st.markdown("---")
 st.subheader("🏗️ โครงสร้างชั้นทาง")
 
 +st.markdown("### 🧱 เลือกวัสดุและพารามิเตอร์แต่ละชั้น")
-+
+
 +rows = []
 +default_thickness = {
 +    "Surface Course": 4.0,
 +    "Base Course": 6.0,
 +    "Subbase Course": 6.0
 +}
-+
+
 +for layer, mats in MATERIAL_LIBRARY.items():
 +    mat = st.selectbox(layer, list(mats.keys()), key=f"mat_{layer}")
 +    rows.append({
@@ -441,7 +441,7 @@ st.subheader("🏗️ โครงสร้างชั้นทาง")
 +        "D (inch)": default_thickness[layer],
 +        "m": mats[mat]["m"]
 +    })
-+
+
 +df_layers = st.data_editor(
 +    pd.DataFrame(rows),
 +    hide_index=True,
