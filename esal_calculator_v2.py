@@ -94,22 +94,26 @@ def calculate_esal(traffic_df, truck_factors, lane_factor, direction_factor):
     results = []
     total_esal = 0
     
+    # รายชื่อ column รถที่ต้องการ
+    truck_codes = ['MB', 'HB', 'MT', 'HT', 'STR', 'TR']
+    
     for idx, row in traffic_df.iterrows():
         year = row.get('Year', idx + 1)
         year_data = {'ปีที่': int(year) if pd.notna(year) else idx + 1}
         year_esal = 0
         
-        for code, tf in truck_factors.items():
-            if code in traffic_df.columns:
+        for code in truck_codes:
+            if code in traffic_df.columns and code in truck_factors:
                 try:
                     aadt = float(row[code]) if pd.notna(row[code]) else 0
                 except:
                     aadt = 0
+                tf = truck_factors[code]
                 esal = aadt * tf * lane_factor * direction_factor * 365
-                year_data[code] = f"{esal:,.0f}"
+                year_data[code] = esal  # เก็บเป็นตัวเลข
                 year_esal += esal
         
-        year_data['ESAL รวม'] = f"{year_esal:,.0f}"
+        year_data['ESAL รวม'] = year_esal
         total_esal += year_esal
         results.append(year_data)
     
@@ -316,7 +320,14 @@ def main():
                 
                 st.divider()
                 st.write("**📊 ESAL รายปี:**")
-                st.dataframe(results_df, use_container_width=True, height=400)
+                
+                # Format ตัวเลขให้อ่านง่าย
+                display_df = results_df.copy()
+                for col in display_df.columns:
+                    if col != 'ปีที่':
+                        display_df[col] = display_df[col].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "0")
+                
+                st.dataframe(display_df, use_container_width=True, height=400)
                 
                 st.download_button("📥 ดาวน์โหลดผลลัพธ์ (CSV)", to_csv(results_df),
                     f"ESAL_{pavement_type}_{param}.csv", "text/csv", use_container_width=True)
