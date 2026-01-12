@@ -1,976 +1,800 @@
+"""
+Equivalent Subbase Thickness & Composite k-value Calculator
+Based on AASHTO 1993 Rigid Pavement Design Guide
+Using Odemark's Equivalent Thickness Method
+"""
+
 import streamlit as st
-import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime
-from io import BytesIO
-import base64
+from scipy.interpolate import interp2d, interp1d
 
-# ═══════════════════════════════════════════════════════════════
-# การตั้งค่าหน้าเว็บ
-# ═══════════════════════════════════════════════════════════════
+# ==================== PAGE CONFIGURATION ====================
 st.set_page_config(
-    page_title="AASHTO 1993 เครื่องคำนวณ",
+    page_title="Equivalent Thickness & k-value Calculator",
+    page_icon="🛣️",
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'https://github.com',
-        'Report a bug': "https://github.com"
-    }
+    initial_sidebar_state="expanded"
 )
 
-# CSS ที่ปรับปรุง
+# ==================== CUSTOM CSS ====================
 st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600;700&display=swap');
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Kanit:wght@400;500;600;700&display=swap');
     
-    * {
-        font-family: 'Prompt', sans-serif;
+    :root {
+        --primary: #1e3a5f;
+        --secondary: #2d5a87;
+        --accent: #f0a500;
+        --success: #28a745;
+        --bg-light: #f8fafc;
+        --text-dark: #1a1a2e;
     }
     
-    /* Header Section */
-    .header-main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 30px 20px;
-        border-radius: 15px;
+    .stApp {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+    }
+    
+    .main-header {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        padding: 2rem 2.5rem;
+        border-radius: 16px;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 40px rgba(30, 58, 95, 0.3);
+    }
+    
+    .main-header h1 {
         color: white;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-    }
-    
-    .header-main h1 {
+        font-family: 'Kanit', sans-serif;
+        font-size: 2rem;
+        font-weight: 600;
         margin: 0;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .main-header p {
+        color: rgba(255,255,255,0.9);
+        font-family: 'Sarabun', sans-serif;
+        font-size: 1.1rem;
+        margin: 0.5rem 0 0 0;
+    }
+    
+    .result-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.8rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border-left: 5px solid var(--accent);
+        margin: 1rem 0;
+    }
+    
+    .result-card h3 {
+        color: var(--primary);
+        font-family: 'Kanit', sans-serif;
+        font-size: 1rem;
+        font-weight: 500;
+        margin: 0 0 0.5rem 0;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .result-value {
+        color: var(--secondary);
+        font-family: 'Kanit', sans-serif;
+        font-size: 2.5rem;
         font-weight: 700;
-        font-size: 2.5em;
+        margin: 0;
     }
     
-    .header-main p {
-        margin: 10px 0 0 0;
-        font-weight: 300;
-        font-size: 1.1em;
-        opacity: 0.9;
-    }
-    
-    /* Box Styles */
-    .success-box {
-        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-        border-left: 5px solid #28a745;
-        padding: 20px;
-        border-radius: 10px;
-        margin: 15px 0;
-        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.1);
+    .result-unit {
+        color: #666;
+        font-family: 'Sarabun', sans-serif;
+        font-size: 1rem;
+        margin-left: 0.5rem;
     }
     
     .info-box {
-        background: linear-gradient(135deg, #cfe2ff 0%, #b6d4fe 100%);
-        border-left: 5px solid #0d6efd;
-        padding: 20px;
-        border-radius: 10px;
-        margin: 15px 0;
-        box-shadow: 0 2px 8px rgba(13, 110, 253, 0.1);
+        background: linear-gradient(135deg, #e8f4fd 0%, #d1e9fa 100%);
+        border-radius: 12px;
+        padding: 1.2rem 1.5rem;
+        margin: 1rem 0;
+        border: 1px solid #b8daef;
+    }
+    
+    .info-box p {
+        color: var(--primary);
+        font-family: 'Sarabun', sans-serif;
+        margin: 0;
+        font-size: 0.95rem;
+    }
+    
+    .formula-box {
+        background: #1a1a2e;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        font-family: 'Courier New', monospace;
+        color: #00ff88;
+        font-size: 1.1rem;
+        text-align: center;
+        box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+    }
+    
+    .section-header {
+        background: linear-gradient(90deg, var(--primary) 0%, transparent 100%);
+        padding: 0.8rem 1.2rem;
+        border-radius: 8px;
+        margin: 1.5rem 0 1rem 0;
+    }
+    
+    .section-header h2 {
+        color: white;
+        font-family: 'Kanit', sans-serif;
+        font-size: 1.2rem;
+        font-weight: 500;
+        margin: 0;
+    }
+    
+    .stSelectbox > div > div {
+        background: white;
+        border-radius: 8px;
+    }
+    
+    .stNumberInput > div > div > input {
+        background: white;
+        border-radius: 8px;
+        border: 2px solid #e0e0e0;
+        font-family: 'Sarabun', sans-serif;
+    }
+    
+    .stNumberInput > div > div > input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(240, 165, 0, 0.2);
+    }
+    
+    div[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, var(--primary) 0%, #0d1f33 100%);
+    }
+    
+    div[data-testid="stSidebar"] .stMarkdown {
+        color: white;
+    }
+    
+    div[data-testid="stSidebar"] label {
+        color: rgba(255,255,255,0.9) !important;
+        font-family: 'Sarabun', sans-serif;
+    }
+    
+    .layer-info {
+        background: white;
+        border-radius: 12px;
+        padding: 1rem 1.2rem;
+        margin: 0.8rem 0;
+        border: 1px solid #e0e0e0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .step-indicator {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        background: var(--accent);
+        color: white;
+        border-radius: 50%;
+        font-family: 'Kanit', sans-serif;
+        font-weight: 600;
+        margin-right: 12px;
+    }
+    
+    .calculation-step {
+        background: white;
+        border-radius: 12px;
+        padding: 1.2rem 1.5rem;
+        margin: 0.8rem 0;
+        border-left: 4px solid var(--secondary);
     }
     
     .warning-box {
         background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
-        border-left: 5px solid #ffc107;
-        padding: 20px;
-        border-radius: 10px;
-        margin: 15px 0;
-        box-shadow: 0 2px 8px rgba(255, 193, 7, 0.1);
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        margin: 1rem 0;
+        border: 1px solid #ffc107;
     }
     
-    .concept-box {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-        border-left: 5px solid #6c757d;
-        padding: 20px;
-        border-radius: 10px;
-        margin: 15px 0;
-        box-shadow: 0 2px 8px rgba(108, 117, 125, 0.1);
-    }
-    
-    /* Metric Cards */
-    .metric-card {
-        background: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-        text-align: center;
-        border-top: 3px solid #667eea;
-    }
-    
-    /* Expander */
-    .streamlit-expanderHeader {
-        font-weight: 600 !important;
-    }
-    
-    /* Table */
-    table {
-        border-collapse: collapse !important;
-        width: 100%;
-    }
-    
-    th {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        color: white !important;
-        font-weight: 600 !important;
-        padding: 12px !important;
-    }
-    
-    /* Divider */
-    .divider-line {
-        border: 1px solid #e0e0e0;
-        margin: 20px 0;
-    }
-    
-    /* Button Hover */
-    .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        color: white !important;
-        font-weight: 600 !important;
-        border: none !important;
-        padding: 12px 30px !important;
-        border-radius: 8px !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    .stButton > button:hover {
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
-        transform: translateY(-2px) !important;
-    }
-    
-    /* Select Box */
-    .stSelectbox, .stNumberInput {
-        border-radius: 8px !important;
-    }
-    </style>
+    /* Hide default Streamlit elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+</style>
 """, unsafe_allow_html=True)
 
-# ═══════════════════════════════════════════════════════════════
-# ส่วนหัว
-# ═══════════════════════════════════════════════════════════════
-st.markdown("""
-    <div class="header-main">
-        <h1>🛣️ เครื่องคำนวณ AASHTO 1993</h1>
-        <p>วิธี Odemark สำหรับออกแบบผิวทางคอนกรีต (JPCP)</p>
-    </div>
-""", unsafe_allow_html=True)
+# ==================== FUNCTIONS ====================
 
-# ═══════════════════════════════════════════════════════════════
-# SIDEBAR
-# ═══════════════════════════════════════════════════════════════
-with st.sidebar:
-    st.markdown("## 📚 ฐานข้อมูลวัสดุ")
-    
-    material_db = {
-        "คอนกรีตแอสฟัลต์ (AC)": 2500,
-        "ชั้นฐานที่เสริมซีเมนต์ (CTB)": 1200,
-        "หินผ่าปรุงแต่งด้วยซีเมนต์": 800,
-        "ดินเสริมปูนขาว": 400,
-        "มวลรวมทุบหรือสกัด (Granular)": 300,
-        "ดินสกัดหรือมวลรวม": 150,
-        "ดินแลตไรต์": 200
+def get_typical_modulus(material_type: str) -> dict:
+    """Get typical modulus values for common materials"""
+    materials = {
+        "Cement Treated Base (CTB)": {"E_min": 3500, "E_max": 7000, "E_typical": 5000},
+        "Lean Concrete Base": {"E_min": 7000, "E_max": 14000, "E_typical": 10000},
+        "Crushed Stone Base": {"E_min": 200, "E_max": 500, "E_typical": 300},
+        "Soil-Cement": {"E_min": 1400, "E_max": 3500, "E_typical": 2000},
+        "Asphalt Treated Base (ATB)": {"E_min": 2000, "E_max": 4000, "E_typical": 3000},
+        "Granular Subbase": {"E_min": 100, "E_max": 300, "E_typical": 150},
+        "Lime Treated Subgrade": {"E_min": 140, "E_max": 400, "E_typical": 200},
+        "Natural Subgrade (Poor)": {"E_min": 20, "E_max": 50, "E_typical": 35},
+        "Natural Subgrade (Fair)": {"E_min": 50, "E_max": 100, "E_typical": 70},
+        "Natural Subgrade (Good)": {"E_min": 100, "E_max": 200, "E_typical": 140},
+        "Custom Value": {"E_min": 0, "E_max": 0, "E_typical": 0}
     }
-    
-    st.markdown("### 📊 ค่า E (Elastic Modulus)")
-    for material, e_value in material_db.items():
-        st.caption(f"**{material}**  \n{e_value} MPa")
-    
-    st.divider()
-    
-    st.markdown("### 💡 แนวคิดหลัก AASHTO 1993")
-    st.info("""
-    ✅ **วิธีถูกต้อง:**
-    - เก็บค่า E จริงของวัสดุ
-    - เก็บความหนา h จริง
-    - **แปลงเป็น:** ความหนาเทียบเท่า
-    
-    ❌ **วิธีผิด:**
-    - ลดค่า E ของวัสดุ
-    
-    **คำถาม:** ระบบนี้เทียบเท่า Reference Material หนาเท่าไร?
-    """)
+    return materials.get(material_type, {"E_min": 0, "E_max": 0, "E_typical": 0})
 
-# ═══════════════════════════════════════════════════════════════
-# TABS
-# ═══════════════════════════════════════════════════════════════
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📋 ขั้นตอนที่ 1: ดินฐาน", 
-    "🏗️ ขั้นตอนที่ 2: ความหนาเทียบเท่า",
-    "🔧 ขั้นตอนที่ 3: k ที่มีประสิทธิผล",
-    "📖 วิธีใช้ & ทฤษฎี"
-])
 
-# ═══════════════════════════════════════════════════════════════
-# TAB 1: ดินฐาน
-# ═══════════════════════════════════════════════════════════════
-with tab1:
-    st.markdown("## 🔹 คุณสมบัติดินฐาน (พื้นฐานอ้างอิง)")
+def calculate_equivalent_thickness(h_sb: float, E_sb: float, E_sg: float) -> float:
+    """
+    Calculate equivalent thickness using Odemark's Method
+    h_e = h_sb × (E_sb / E_sg)^(1/3)
+    """
+    if E_sg <= 0:
+        return 0
+    ratio = E_sb / E_sg
+    h_e = h_sb * (ratio ** (1/3))
+    return h_e
+
+
+def calculate_composite_k(k_sg: float, h_e: float) -> float:
+    """
+    Calculate composite k-value based on AASHTO 1993 Figure 3.3
+    Using polynomial approximation of the chart
     
-    st.markdown("""
-    <div class="concept-box">
-    <b>📌 ขั้นตอนที่ 1:</b> กำหนดคุณสมบัติดินฐานจากการทดสอบ CBR
-    </div>
-    """, unsafe_allow_html=True)
+    Parameters:
+    - k_sg: Subgrade k-value (pci or MPa/m)
+    - h_e: Equivalent subbase thickness (inches or cm)
     
-    col1, col2, col3 = st.columns([1, 1, 1])
+    Returns:
+    - Composite k-value (same unit as k_sg)
+    """
+    # Conversion: if h_e in cm, convert to inches for calculation
+    # The AASHTO chart uses inches
     
-    with col1:
-        cbr_sg = st.number_input(
-            "💧 CBR ของดินฐาน (%)",
-            min_value=1.0,
-            max_value=30.0,
-            value=5.0,
-            step=0.5,
-            key="cbr_sg_main",
-            help="ค่า California Bearing Ratio จากการทดสอบในห้องแล็บ"
-        )
+    # Approximation based on AASHTO 1993 Figure 3.3
+    # k_composite = k_sg × multiplier
+    # multiplier depends on h_e (in inches)
     
-    # คำนวณค่า
-    e_sg = 17.6 * (cbr_sg ** 0.64)
-    mr_sg_psi = e_sg * 145.038
-    k1 = mr_sg_psi / 19.4
+    if h_e <= 0:
+        return k_sg
     
-    with col2:
-        st.metric(
-            label="🔹 E (โมดูลัส)",
-            value=f"{e_sg:.1f} MPa",
-            delta=f"{mr_sg_psi:.0f} psi"
-        )
+    # Thickness breakpoints (inches): 0, 4, 6, 8, 10, 12
+    # Multipliers vary by subgrade k-value
     
-    with col3:
-        st.metric(
-            label="🔹 k₁ (ดินฐาน)",
-            value=f"{k1:.1f} pci",
-            delta="ไม่มีการสูญเสีย"
-        )
+    # Simplified approximation formula based on curve fitting
+    # For treated base (high E_sb/E_sg ratio)
+    h_inches = h_e / 2.54  # Convert cm to inches if needed
     
-    st.divider()
+    # Cap the thickness effect (diminishing returns after ~12 inches)
+    h_effective = min(h_inches, 18)
     
-    st.markdown("### 📊 รายละเอียดการคำนวณ")
+    # Logarithmic relationship approximation
+    if h_effective < 1:
+        multiplier = 1.0
+    else:
+        # Base multiplier increases with thickness
+        # Higher k_sg values show less percentage increase
+        base_increase = 0.08 * h_effective + 0.005 * (h_effective ** 1.5)
+        
+        # Adjustment factor for subgrade k-value
+        # Lower k values benefit more from subbase
+        if k_sg < 50:
+            k_factor = 1.3
+        elif k_sg < 100:
+            k_factor = 1.15
+        elif k_sg < 200:
+            k_factor = 1.0
+        else:
+            k_factor = 0.85
+        
+        multiplier = 1.0 + (base_increase * k_factor)
     
-    col_calc1, col_calc2 = st.columns(2)
+    # Cap maximum multiplier (typically doesn't exceed 3x)
+    multiplier = min(multiplier, 3.0)
     
-    with col_calc1:
-        st.markdown("""
-        **สูตร: E จาก CBR**
-        ```
-        E = 17.6 × CBR^0.64
-        ```
-        """)
-        st.markdown(f"""
-        ```
-        E = 17.6 × {cbr_sg}^0.64
-        E = {e_sg:.2f} MPa
-        ```
-        """)
+    k_composite = k_sg * multiplier
     
-    with col_calc2:
-        st.markdown("""
-        **สูตร: k จาก M_R**
-        ```
-        M_R (psi) = E (MPa) × 145.038
-        k = M_R / 19.4
-        ```
-        """)
-        st.markdown(f"""
-        ```
-        M_R = {e_sg:.2f} × 145.038
-        M_R = {mr_sg_psi:.0f} psi
-        k₁ = {mr_sg_psi:.0f} / 19.4
-        k₁ = {k1:.1f} pci
-        ```
-        """)
+    return k_composite
+
+
+def interpolate_k_from_chart(k_sg: float, h_sb_inches: float) -> float:
+    """
+    Interpolate composite k-value from AASHTO 1993 Figure 3.3 data
+    More accurate than formula approximation
+    """
+    # AASHTO 1993 Figure 3.3 data points
+    # Subbase thickness (inches): 4, 6, 9, 12
+    # Subgrade k (pci): 50, 100, 200
     
-    # สร้าง visualization
-    st.markdown("### 📈 กราฟแสดงความสัมพันธ์ CBR - E")
+    thickness_points = np.array([0, 4, 6, 9, 12, 18])
+    k_sg_points = np.array([50, 100, 200, 300])
     
-    cbr_range = np.linspace(1, 20, 50)
-    e_range = 17.6 * (cbr_range ** 0.64)
+    # Composite k values from chart (k_sg × rows, thickness × cols)
+    k_composite_data = np.array([
+        [50, 65, 75, 85, 110, 130],     # k_sg = 50
+        [100, 130, 140, 160, 190, 220],  # k_sg = 100
+        [200, 230, 270, 300, 320, 350],  # k_sg = 200
+        [300, 350, 400, 430, 470, 500],  # k_sg = 300
+    ])
+    
+    # Clamp input values
+    h_clamped = np.clip(h_sb_inches, 0, 18)
+    k_clamped = np.clip(k_sg, 50, 300)
+    
+    # Create interpolation function
+    f = interp2d(thickness_points, k_sg_points, k_composite_data, kind='linear')
+    
+    result = f(h_clamped, k_clamped)[0]
+    return result
+
+
+def k_pci_to_mpa_m(k_pci: float) -> float:
+    """Convert k-value from pci to MPa/m"""
+    return k_pci * 0.2714
+
+
+def k_mpa_m_to_pci(k_mpa_m: float) -> float:
+    """Convert k-value from MPa/m to pci"""
+    return k_mpa_m / 0.2714
+
+
+def create_k_value_chart(k_sg: float, h_e_cm: float, k_composite: float):
+    """Create visualization chart for k-value relationship"""
+    
+    # Generate data for different subgrade k-values
+    h_range = np.linspace(0, 50, 100)  # cm
     
     fig = go.Figure()
+    
+    k_values = [30, 50, 75, 100, 150, 200]
+    colors = ['#ff6b6b', '#feca57', '#48dbfb', '#1dd1a1', '#5f27cd', '#222f3e']
+    
+    for k, color in zip(k_values, colors):
+        k_comp_range = [calculate_composite_k(k, h) for h in h_range]
+        fig.add_trace(go.Scatter(
+            x=h_range,
+            y=k_comp_range,
+            mode='lines',
+            name=f'k = {k} pci',
+            line=dict(color=color, width=2),
+            hovertemplate=f'k_sg = {k} pci<br>h_e = %{{x:.1f}} cm<br>k_eff = %{{y:.1f}} pci<extra></extra>'
+        ))
+    
+    # Add current point
     fig.add_trace(go.Scatter(
-        x=cbr_range,
-        y=e_range,
-        mode='lines',
-        name='E = 17.6 × CBR^0.64',
-        line=dict(color='#667eea', width=3),
-        fill='tozeroy',
-        fillcolor='rgba(102, 126, 234, 0.2)'
+        x=[h_e_cm],
+        y=[k_composite],
+        mode='markers',
+        name='Current Design',
+        marker=dict(
+            size=15,
+            color='#f0a500',
+            symbol='star',
+            line=dict(color='white', width=2)
+        ),
+        hovertemplate=f'<b>Design Point</b><br>h_e = {h_e_cm:.1f} cm<br>k_eff = {k_composite:.1f} pci<extra></extra>'
     ))
     
-    fig.add_scatter(
-        x=[cbr_sg],
-        y=[e_sg],
-        mode='markers',
-        marker=dict(size=15, color='#764ba2'),
-        name=f'CBR = {cbr_sg}%'
+    fig.update_layout(
+        title=dict(
+            text='Composite k-value vs Equivalent Subbase Thickness',
+            font=dict(size=18, family='Kanit')
+        ),
+        xaxis_title='Equivalent Subbase Thickness (cm)',
+        yaxis_title='Composite k-value (pci)',
+        font=dict(family='Sarabun'),
+        plot_bgcolor='rgba(248,250,252,1)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01,
+            bgcolor='rgba(255,255,255,0.8)'
+        ),
+        hovermode='closest',
+        margin=dict(l=60, r=30, t=60, b=60)
     )
+    
+    fig.update_xaxes(gridcolor='rgba(0,0,0,0.1)', zeroline=False)
+    fig.update_yaxes(gridcolor='rgba(0,0,0,0.1)', zeroline=False)
+    
+    return fig
+
+
+def create_layer_diagram(h_sb: float, h_e: float, E_sb: float, E_sg: float):
+    """Create a schematic diagram of pavement layers"""
+    
+    fig = go.Figure()
+    
+    # Layer heights for visualization
+    pcc_height = 25
+    sb_height = h_sb
+    sg_height = 30
+    
+    total_height = pcc_height + sb_height + sg_height
+    
+    # PCC Layer
+    fig.add_shape(type="rect",
+        x0=0, y0=total_height - pcc_height, x1=100, y1=total_height,
+        fillcolor="#95a5a6", line=dict(color="#7f8c8d", width=2)
+    )
+    fig.add_annotation(x=50, y=total_height - pcc_height/2,
+        text="<b>PCC Slab</b>", showarrow=False,
+        font=dict(size=14, color="white", family="Kanit"))
+    
+    # Subbase Layer
+    fig.add_shape(type="rect",
+        x0=0, y0=total_height - pcc_height - sb_height, 
+        x1=100, y1=total_height - pcc_height,
+        fillcolor="#e67e22", line=dict(color="#d35400", width=2)
+    )
+    fig.add_annotation(x=50, y=total_height - pcc_height - sb_height/2,
+        text=f"<b>Subbase</b><br>h = {h_sb:.1f} cm | E = {E_sb:.0f} MPa",
+        showarrow=False, font=dict(size=12, color="white", family="Sarabun"))
+    
+    # Subgrade Layer
+    fig.add_shape(type="rect",
+        x0=0, y0=0, x1=100, y1=total_height - pcc_height - sb_height,
+        fillcolor="#8b4513", line=dict(color="#654321", width=2)
+    )
+    fig.add_annotation(x=50, y=(total_height - pcc_height - sb_height)/2,
+        text=f"<b>Subgrade</b><br>E = {E_sg:.0f} MPa",
+        showarrow=False, font=dict(size=12, color="white", family="Sarabun"))
+    
+    # Equivalent thickness indicator
+    fig.add_shape(type="line",
+        x0=105, y0=total_height - pcc_height, x1=105, y1=total_height - pcc_height - h_e,
+        line=dict(color="#f0a500", width=3)
+    )
+    fig.add_shape(type="line",
+        x0=102, y0=total_height - pcc_height, x1=108, y1=total_height - pcc_height,
+        line=dict(color="#f0a500", width=2)
+    )
+    fig.add_shape(type="line",
+        x0=102, y0=total_height - pcc_height - h_e, x1=108, y1=total_height - pcc_height - h_e,
+        line=dict(color="#f0a500", width=2)
+    )
+    fig.add_annotation(x=115, y=total_height - pcc_height - h_e/2,
+        text=f"<b>h<sub>e</sub> = {h_e:.1f} cm</b>",
+        showarrow=False, font=dict(size=13, color="#f0a500", family="Kanit"))
     
     fig.update_layout(
-        title="ความสัมพันธ์ระหว่าง CBR และ Elastic Modulus",
-        xaxis_title="CBR (%)",
-        yaxis_title="E (MPa)",
-        hovermode='x unified',
-        template='plotly_white',
-        height=400
+        showlegend=False,
+        xaxis=dict(visible=False, range=[-5, 130]),
+        yaxis=dict(visible=False, range=[-5, total_height + 10]),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=10, r=10, t=10, b=10),
+        height=300
     )
     
-    st.plotly_chart(fig, use_container_width=True)
-    
-    st.success(f"✅ ดินฐานของอาจารย์มี CBR = {cbr_sg}% → E = {e_sg:.1f} MPa → k₁ = {k1:.1f} pci")
-    
-    # เก็บค่าในหน่วยความจำ
-    st.session_state.cbr_sg = cbr_sg
-    st.session_state.e_sg = e_sg
-    st.session_state.mr_sg_psi = mr_sg_psi
-    st.session_state.k1 = k1
+    return fig
 
-# ═══════════════════════════════════════════════════════════════
-# TAB 2: ความหนาเทียบเท่า
-# ═══════════════════════════════════════════════════════════════
-with tab2:
-    st.markdown("## 🔹 ความหนาเทียบเท่า (Equivalent Thickness)")
-    
+
+# ==================== MAIN APP ====================
+
+def main():
+    # Header
     st.markdown("""
-    <div class="concept-box">
-    <b>📌 ขั้นตอนที่ 2:</b> กำหนดชั้นทางจริง + เลือกวัสดุอ้างอิง
-    <br><br>
-    <b>⭐ ประเด็นสำคัญ:</b> เราไม่ลดค่า E ของชั้นใดเลย!
-    <br>
-    เราแปลง "ระบบหลายชั้น" เป็น "ความหนาเทียบเท่า" ของวัสดุอ้างอิง
+    <div class="main-header">
+        <h1>🛣️ Equivalent Subbase Thickness & k-value Calculator</h1>
+        <p>การคำนวณความหนาเทียบเท่าและค่า k-value ตามวิธี Odemark | AASHTO 1993</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # ดึงค่า E ของดินฐาน
-    if 'e_sg' in st.session_state:
-        e_sg_ref = st.session_state.e_sg
-        cbr_sg_ref = st.session_state.cbr_sg
-    else:
-        cbr_sg_ref = 5
-        e_sg_ref = 17.6 * (5 ** 0.64)
-    
-    st.divider()
-    
-    st.markdown("### 🔸 ขั้นตอนที่ 2ก: เลือกวัสดุอ้างอิง")
-    
-    material_db = {
-        "คอนกรีตแอสฟัลต์ (AC)": 2500,
-        "ชั้นฐานที่เสริมซีเมนต์ (CTB)": 1200,
-        "หินผ่าปรุงแต่งด้วยซีเมนต์": 800,
-        "ดินเสริมปูนขาว": 400,
-        "มวลรวมทุบหรือสกัด (Granular) ✓ แนะนำ": 300,
-        "ดินสกัดหรือมวลรวม": 150,
-        "ดินแลตไรต์": 200
-    }
-    
-    ref_material = st.selectbox(
-        "🎯 เลือกวัสดุอ้างอิง (Reference Material)",
-        list(material_db.keys()),
-        index=4,
-        help="นี่คือวัสดุที่เราจะเปรียบเทียบชั้นทางอื่นๆ"
-    )
-    
-    e_ref = material_db[ref_material]
-    
-    col_ref1, col_ref2, col_ref3 = st.columns(3)
-    with col_ref1:
-        st.info(f"**วัสดุ:** {ref_material.split('✓')[0].strip()}")
-    with col_ref2:
-        st.info(f"**E_ref:** {e_ref} MPa")
-    with col_ref3:
-        st.info(f"**CBR ของดินฐาน:** {cbr_sg_ref}%")
-    
-    st.divider()
-    
-    st.markdown("### 🔸 ขั้นตอนที่ 2ข: กำหนดชั้นทางจริง")
-    
-    num_layers = st.selectbox(
-        "📊 จำนวนชั้นทางเหนือดินฐาน",
-        [1, 2, 3, 4, 5],
-        index=2,
-        key="num_layers_tab2"
-    )
-    
-    layers = []
-    
-    layer_container = st.container()
-    
-    for i in range(num_layers):
-        with st.expander(f"🟦 ชั้นที่ {i+1}", expanded=(i==0)):
-            col_mat, col_h, col_e = st.columns([2, 1, 1])
-            
-            with col_mat:
-                mat = st.selectbox(
-                    f"วัสดุ",
-                    list(material_db.keys()),
-                    index=0 if i==0 else (1 if i==1 else 4),
-                    key=f"mat_tab2_{i}",
-                    label_visibility="collapsed"
-                )
-            
-            with col_h:
-                h = st.number_input(
-                    f"หนา (cm)",
-                    min_value=1.0,
-                    value=10.0 if i < 2 else 15.0,
-                    step=0.5,
-                    key=f"h_tab2_{i}",
-                    label_visibility="collapsed"
-                )
-            
-            with col_e:
-                e_default = material_db[mat]
-                e = st.number_input(
-                    f"E (MPa)",
-                    min_value=10.0,
-                    value=float(e_default),
-                    step=10.0,
-                    key=f"E_tab2_{i}",
-                    label_visibility="collapsed"
-                )
-            
-            st.caption(f"**ชั้นที่ {i+1}:** {h} cm • {mat.split('✓')[0].strip()} @ {e} MPa")
-            
-            layers.append({
-                "Layer": i + 1,
-                "Material": mat.split('✓')[0].strip(),
-                "h_actual (cm)": h,
-                "E_actual (MPa)": e
-            })
-    
-    st.divider()
-    
-    # ปุ่มคำนวณ
-    col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
-    
-    with col_btn1:
-        calculate_heq = st.button(
-            "🧮 คำนวณความหนาเทียบเท่า",
-            use_container_width=True,
-            key="calc_heq",
-            type="primary"
-        )
-    
-    # ผลลัพธ์
-    if calculate_heq:
-        st.session_state.calculate_heq = True
-    
-    if 'calculate_heq' in st.session_state and st.session_state.calculate_heq:
+    # Sidebar for input
+    with st.sidebar:
+        st.markdown("### 📐 ข้อมูลนำเข้า")
         st.markdown("---")
-        st.markdown("## 📊 ผลลัพธ์: ความหนาเทียบเท่า")
         
-        results = []
-        total_h_actual = 0
-        total_h_eq = 0
+        # Unit system
+        unit_system = st.radio(
+            "ระบบหน่วย",
+            ["SI (MPa, cm)", "US (psi, inch)"],
+            horizontal=True
+        )
         
-        for layer in layers:
-            h = layer["h_actual (cm)"]
-            e = layer["E_actual (MPa)"]
-            
-            # Odemark formula
-            h_eq = h * ((e / e_ref) ** (1/3))
-            
-            total_h_actual += h
-            total_h_eq += h_eq
-            
-            results.append({
-                "ชั้น": layer["Layer"],
-                "วัสดุ": layer["Material"],
-                "h จริง (cm)": round(h, 2),
-                "E จริง (MPa)": round(e, 0),
-                "E/E_ref": round(e/e_ref, 3),
-                "(E/E_ref)^(1/3)": round((e/e_ref)**(1/3), 3),
-                "h_eq (cm)": round(h_eq, 2)
-            })
+        is_si = unit_system == "SI (MPa, cm)"
         
-        df_results = pd.DataFrame(results)
+        st.markdown("---")
+        st.markdown("#### 🔹 ชั้น Subbase")
         
-        st.markdown("### 📋 การคำนวณรายละเอียดของแต่ละชั้น")
-        st.dataframe(df_results, use_container_width=True, hide_index=True)
+        # Subbase material selection
+        sb_material = st.selectbox(
+            "ประเภทวัสดุ Subbase",
+            [
+                "Cement Treated Base (CTB)",
+                "Lean Concrete Base",
+                "Crushed Stone Base",
+                "Soil-Cement",
+                "Asphalt Treated Base (ATB)",
+                "Granular Subbase",
+                "Custom Value"
+            ]
+        )
         
-        st.markdown("### 🎯 สรุปผลลัพธ์")
+        mat_info = get_typical_modulus(sb_material)
         
-        summary_col1, summary_col2, summary_col3 = st.columns(3)
+        if sb_material != "Custom Value":
+            st.info(f"E typical: {mat_info['E_typical']} MPa\n\n"
+                   f"Range: {mat_info['E_min']} - {mat_info['E_max']} MPa")
         
-        with summary_col1:
-            st.metric(
-                label="💪 ความหนาจริงรวม",
-                value=f"{total_h_actual:.1f} cm",
-                delta=f"{total_h_actual/2.54:.2f} นิ้ว"
-            )
-        
-        with summary_col2:
-            st.metric(
-                label="🎯 วัสดุอ้างอิง",
-                value=f"E = {e_ref} MPa",
-                delta=ref_material.split('✓')[0].strip()
-            )
-        
-        with summary_col3:
-            st.metric(
-                label="📏 ความหนาเทียบเท่า",
-                value=f"{total_h_eq:.1f} cm",
-                delta=f"{total_h_eq/2.54:.2f} นิ้ว"
-            )
-        
-        st.divider()
-        
-        # Visualization
-        st.markdown("### 📈 กราฟเปรียบเทียบ")
-        
-        col_chart1, col_chart2 = st.columns(2)
-        
-        with col_chart1:
-            fig_bar = go.Figure()
-            
-            fig_bar.add_trace(go.Bar(
-                y=[r["วัสดุ"] for r in results],
-                x=[r["h จริง (cm)"] for r in results],
-                orientation='h',
-                name='h จริง',
-                marker=dict(color='#667eea')
-            ))
-            
-            fig_bar.update_layout(
-                title="ความหนาจริงของแต่ละชั้น",
-                xaxis_title="ความหนา (cm)",
-                yaxis_title="ชั้น",
-                height=400,
-                template='plotly_white'
+        if is_si:
+            h_sb = st.number_input(
+                "ความหนา Subbase (cm)",
+                min_value=5.0,
+                max_value=100.0,
+                value=15.0,
+                step=1.0
             )
             
-            st.plotly_chart(fig_bar, use_container_width=True)
+            E_sb = st.number_input(
+                "Modulus ของ Subbase, E_sb (MPa)",
+                min_value=50.0,
+                max_value=50000.0,
+                value=float(mat_info['E_typical']) if mat_info['E_typical'] > 0 else 500.0,
+                step=50.0
+            )
+        else:
+            h_sb_inch = st.number_input(
+                "ความหนา Subbase (inch)",
+                min_value=2.0,
+                max_value=40.0,
+                value=6.0,
+                step=0.5
+            )
+            h_sb = h_sb_inch * 2.54
+            
+            E_sb_psi = st.number_input(
+                "Modulus ของ Subbase, E_sb (psi)",
+                min_value=7000.0,
+                max_value=7000000.0,
+                value=float(mat_info['E_typical'] * 145) if mat_info['E_typical'] > 0 else 72500.0,
+                step=1000.0
+            )
+            E_sb = E_sb_psi / 145.038
         
-        with col_chart2:
-            fig_eq = go.Figure()
-            
-            fig_eq.add_trace(go.Bar(
-                y=[r["วัสดุ"] for r in results],
-                x=[r["h_eq (cm)"] for r in results],
-                orientation='h',
-                name='h เทียบเท่า',
-                marker=dict(color='#764ba2')
-            ))
-            
-            fig_eq.update_layout(
-                title="ความหนาเทียบเท่า (Granular)",
-                xaxis_title="ความหนา (cm)",
-                yaxis_title="ชั้น",
-                height=400,
-                template='plotly_white'
+        st.markdown("---")
+        st.markdown("#### 🔸 ชั้น Subgrade")
+        
+        sg_material = st.selectbox(
+            "ประเภท Subgrade",
+            [
+                "Natural Subgrade (Poor)",
+                "Natural Subgrade (Fair)",
+                "Natural Subgrade (Good)",
+                "Lime Treated Subgrade",
+                "Custom Value"
+            ]
+        )
+        
+        sg_info = get_typical_modulus(sg_material)
+        
+        if sg_material != "Custom Value":
+            st.info(f"E typical: {sg_info['E_typical']} MPa\n\n"
+                   f"Range: {sg_info['E_min']} - {sg_info['E_max']} MPa")
+        
+        if is_si:
+            E_sg = st.number_input(
+                "Modulus ของ Subgrade, E_sg (MPa)",
+                min_value=10.0,
+                max_value=500.0,
+                value=float(sg_info['E_typical']) if sg_info['E_typical'] > 0 else 50.0,
+                step=5.0
             )
             
-            st.plotly_chart(fig_eq, use_container_width=True)
-        
-        st.markdown(f"""
-        <div class="success-box">
-        <h4>✅ การแปลความหมาย (แนวคิดที่ถูกต้อง):</h4>
-        <p>ระบบชั้นทางของอาจารย์ที่มี <b>ความหนาจริง {total_h_actual:.1f} cm</b> 
-        (ประกอบด้วยวัสดุหลายชนิดที่มี E ต่างกัน) 
-        มีความแข็งแรงเทียบเท่ากับชั้นเดียวของ <b>{ref_material.split('✓')[0].strip()}</b> 
-        ที่มี <b>ความหนา {total_h_eq:.1f} cm</b></p>
-        
-        <p><b>สิ่งที่ไม่ได้เกิดขึ้น:</b></p>
-        <ul>
-        <li>❌ ไม่ได้ลดค่า E ของ AC จาก 2500 MPa ลงมา</li>
-        <li>❌ ไม่ได้เปลี่ยนความหนาจริงของชั้นใด</li>
-        <li>✅ ทำการแปลง: "ระบบ 3 ชั้น" → "ความหนาเทียบเท่า Reference Material"</li>
-        </ul>
+            k_sg = st.number_input(
+                "k-value ของ Subgrade (MPa/m)",
+                min_value=10.0,
+                max_value=200.0,
+                value=27.0,
+                step=1.0,
+                help="ค่า k เริ่มต้นของดินเดิม (Modulus of Subgrade Reaction)"
+            )
+            k_sg_pci = k_mpa_m_to_pci(k_sg)
+        else:
+            E_sg_psi = st.number_input(
+                "Modulus ของ Subgrade, E_sg (psi)",
+                min_value=1500.0,
+                max_value=75000.0,
+                value=float(sg_info['E_typical'] * 145) if sg_info['E_typical'] > 0 else 7250.0,
+                step=500.0
+            )
+            E_sg = E_sg_psi / 145.038
+            
+            k_sg_pci = st.number_input(
+                "k-value ของ Subgrade (pci)",
+                min_value=30.0,
+                max_value=750.0,
+                value=100.0,
+                step=5.0,
+                help="ค่า k เริ่มต้นของดินเดิม (Modulus of Subgrade Reaction)"
+            )
+            k_sg = k_pci_to_mpa_m(k_sg_pci)
+    
+    # Main content
+    col1, col2 = st.columns([1.2, 1])
+    
+    with col1:
+        st.markdown("""
+        <div class="section-header">
+            <h2>📊 ผลการคำนวณ</h2>
         </div>
         """, unsafe_allow_html=True)
         
-        st.session_state.total_h_eq = total_h_eq
-        st.session_state.layers_data = layers
-        st.session_state.e_ref = e_ref
-        st.session_state.ref_material_name = ref_material.split('✓')[0].strip()
-
-# ═══════════════════════════════════════════════════════════════
-# TAB 3: k ที่มีประสิทธิผล
-# ═══════════════════════════════════════════════════════════════
-with tab3:
-    st.markdown("## 🔹 โมดูลัสของปฏิกิริยาดินฐานที่มีประสิทธิผล (k_eff)")
-    
-    st.markdown("""
-    <div class="concept-box">
-    <b>📌 ขั้นตอนที่ 3:</b> คำนวณค่า k ที่มีประสิทธิผล สำหรับใช้ในการออกแบบ
-    <br>
-    k_eff คำนึงถึงการรองรับจากชั้นรองพื้น
-    </div>
-    """, unsafe_allow_html=True)
-    
-    if 'k1' in st.session_state:
-        k1_val = st.session_state.k1
-        e_sg_val = st.session_state.e_sg
-        cbr_sg_val = st.session_state.cbr_sg
-    else:
-        cbr_sg_val = st.number_input(
-            "💧 CBR ของดินฐาน (%)",
-            min_value=1.0,
-            max_value=30.0,
-            value=5.0,
-            step=0.5,
-            key="cbr_for_k"
-        )
-        e_sg_val = 17.6 * (cbr_sg_val ** 0.64)
-        k1_val = (e_sg_val * 145.038) / 19.4
-    
-    col_k1a, col_k1b = st.columns(2)
-    
-    with col_k1a:
-        st.metric(
-            label="📊 k₁ (ดินฐานเพียงอย่างเดียว)",
-            value=f"{k1_val:.1f} pci",
-            delta=f"CBR = {cbr_sg_val}%, E = {e_sg_val:.1f} MPa"
-        )
-    
-    with col_k1b:
-        st.info("""
-        **k₁** = ค่า k ของดินฐาน **ไม่มี** การรองรับจากชั้นรองพื้น
-        """)
-    
-    st.divider()
-    
-    st.markdown("### 🔸 ขั้นตอนที่ 3ก: ตัวประกอบการสูญเสียการรองรับ (f_LS)")
-    
-    st.markdown("""
-    **ตัวประกอบการสูญเสียการรองรับ (f_LS)** คำนึงถึง:
-    - ความหนาและคุณภาพของชั้นรองพื้น
-    - เงื่อนไขการระบายน้ำ
-    - การพังทลายหรือสูบน้ำ
-    
-    **สูตร:**
-    ```
-    k_eff = k₁ / f_LS
-    ```
-    """)
-    
-    ls_options = {
-        "ไม่มีการสูญเสีย (รองรับดีเยี่ยม)": 1.0,
-        "LS = 1 (Granular ดี + ระบายน้ำดี)": 0.9,
-        "LS = 2 (ชั้นรองพื้นปานกลาง หรือระบายน้ำปานกลาง)": 0.8,
-        "LS = 3 (ชั้นรองพื้นไม่ดี หรือระบายน้ำไม่ดี)": 0.6
-    }
-    
-    ls_description = st.selectbox(
-        "🎯 เลือกสภาวะการสูญเสีย",
-        list(ls_options.keys()),
-        help="เลือกตามประเภทชั้นรองพื้นและการระบายน้ำ"
-    )
-    
-    f_ls = ls_options[ls_description]
-    
-    col_fls1, col_fls2 = st.columns(2)
-    
-    with col_fls1:
-        st.metric(
-            label="🔹 ตัวประกอบ f_LS",
-            value=f"{f_ls}",
-            delta=ls_description.split("(")[0]
-        )
-    
-    with col_fls2:
-        st.info(f"""
-        **สภาวะที่เลือก:**
+        # Calculate equivalent thickness
+        h_e = calculate_equivalent_thickness(h_sb, E_sb, E_sg)
+        h_e_inch = h_e / 2.54
         
-        {ls_description}
-        """)
-    
-    # Custom input
-    st.markdown("---")
-    st.markdown("**หรือปรับปรุงค่าด้วยตัวเอง:**")
-    f_ls_custom = st.slider(
-        "🎚️ ค่า f_LS แบบกำหนดเอง",
-        min_value=0.5,
-        max_value=2.0,
-        value=f_ls,
-        step=0.05,
-        help="0.5-1.0 = ดี, 1.0-1.5 = ปานกลาง, >1.5 = ไม่ดี"
-    )
-    
-    f_ls = f_ls_custom
-    
-    st.divider()
-    
-    st.markdown("### 🔸 ขั้นตอนที่ 3ข: คำนวณ k_eff")
-    
-    if st.button("🧮 คำนวณค่า k ที่มีประสิทธิผล", use_container_width=True, key="calc_keff", type="primary"):
-        st.session_state.calculate_keff = True
-    
-    if 'calculate_keff' in st.session_state and st.session_state.calculate_keff:
-        k_eff = k1_val / f_ls
+        # Calculate composite k-value
+        k_composite_pci = interpolate_k_from_chart(k_sg_pci, h_e_inch)
+        k_composite = k_pci_to_mpa_m(k_composite_pci)
         
-        st.markdown("---")
-        st.markdown("## 📊 ผลลัพธ์: ค่า k ที่มีประสิทธิผล")
+        # Modulus ratio
+        modulus_ratio = E_sb / E_sg
         
-        calc_col1, calc_col2, calc_col3 = st.columns(3)
+        # Display results
+        res_col1, res_col2 = st.columns(2)
         
-        with calc_col1:
-            st.markdown(f"""
-            <div class="metric-card">
-            <h4 style="margin: 0;">k₁ (พื้นฐาน)</h4>
-            <h2 style="margin: 10px 0 0 0; color: #667eea;"><b>{k1_val:.1f} pci</b></h2>
-            <small>ดินฐานเพียงอย่างเดียว</small>
-            </div>
-            """, unsafe_allow_html=True)
+        with res_col1:
+            if is_si:
+                st.markdown(f"""
+                <div class="result-card">
+                    <h3>ความหนาเทียบเท่า (h<sub>e</sub>)</h3>
+                    <p class="result-value">{h_e:.2f}<span class="result-unit">cm</span></p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="result-card">
+                    <h3>ความหนาเทียบเท่า (h<sub>e</sub>)</h3>
+                    <p class="result-value">{h_e_inch:.2f}<span class="result-unit">inch</span></p>
+                </div>
+                """, unsafe_allow_html=True)
         
-        with calc_col2:
-            st.markdown(f"""
-            <div class="metric-card">
-            <h4 style="margin: 0;">f_LS (การสูญเสีย)</h4>
-            <h2 style="margin: 10px 0 0 0; color: #ffc107;"><b>{f_ls:.2f}</b></h2>
-            <small>ตัวประกอบการสูญเสีย</small>
-            </div>
-            """, unsafe_allow_html=True)
+        with res_col2:
+            if is_si:
+                st.markdown(f"""
+                <div class="result-card">
+                    <h3>ค่า k-value รวม (k<sub>eff</sub>)</h3>
+                    <p class="result-value">{k_composite:.1f}<span class="result-unit">MPa/m</span></p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="result-card">
+                    <h3>ค่า k-value รวม (k<sub>eff</sub>)</h3>
+                    <p class="result-value">{k_composite_pci:.1f}<span class="result-unit">pci</span></p>
+                </div>
+                """, unsafe_allow_html=True)
         
-        with calc_col3:
-            st.markdown(f"""
-            <div class="metric-card">
-            <h4 style="margin: 0;">k_eff (ออกแบบ)</h4>
-            <h2 style="margin: 10px 0 0 0; color: #28a745;"><b>{k_eff:.1f} pci</b></h2>
-            <small>ใช้ในการออกแบบ JPCP</small>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.divider()
-        
+        # Additional info
         st.markdown(f"""
         <div class="info-box">
-        <h4>📝 รายละเอียดการคำนวณ:</h4>
-        <p style="font-size: 1.1em;">
-        <b>k_eff = k₁ / f_LS</b><br>
-        k_eff = {k1_val:.1f} / {f_ls:.2f} = <b style="color: #28a745;">{k_eff:.1f} pci</b>
-        </p>
+            <p><strong>อัตราส่วน Modulus:</strong> E<sub>sb</sub>/E<sub>sg</sub> = {modulus_ratio:.2f}</p>
+            <p><strong>ค่าเพิ่มของ k-value:</strong> {((k_composite_pci/k_sg_pci - 1)*100):.1f}% จาก k<sub>subgrade</sub></p>
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown("---")
-        
-        st.markdown("### 📋 สรุปผลออกแบบ")
-        
-        summary_table = {
-            "รายการ": [
-                "CBR ของดินฐาน",
-                "โมดูลัส E ของดินฐาน",
-                "ค่า M_R ของดินฐาน",
-                "k₁ (ดินฐานเพียงอย่างเดียว)",
-                "ตัวประกอบการสูญเสีย (f_LS)",
-                "k_eff (ใช้ในการออกแบบ JPCP)"
-            ],
-            "ค่า": [
-                f"{cbr_sg_val} %",
-                f"{e_sg_val:.1f} MPa",
-                f"{e_sg_val * 145.038:.0f} psi",
-                f"{k1_val:.1f} pci",
-                f"{f_ls}",
-                f"{k_eff:.1f} pci"
-            ]
-        }
-        
-        df_summary = pd.DataFrame(summary_table)
-        st.dataframe(df_summary, use_container_width=True, hide_index=True)
-        
-        st.markdown("---")
-        
-        # Visualization
-        st.markdown("### 📈 การเปรียบเทียบค่า k")
-        
-        fig_k = go.Figure()
-        
-        fig_k.add_trace(go.Bar(
-            x=['k₁ (ดินฐาน)', 'k_eff (มีชั้นรองพื้น)'],
-            y=[k1_val, k_eff],
-            marker=dict(color=['#667eea', '#28a745']),
-            text=[f'{k1_val:.1f}', f'{k_eff:.1f}'],
-            textposition='auto'
-        ))
-        
-        fig_k.update_layout(
-            title="การเปรียบเทียบค่า k ก่อนและหลังรองรับ",
-            yaxis_title="ค่า k (pci)",
-            height=400,
-            template='plotly_white',
-            showlegend=False
-        )
-        
-        st.plotly_chart(fig_k, use_container_width=True)
+        # Formula display
+        st.markdown("""
+        <div class="section-header">
+            <h2>📝 สูตรการคำนวณ (Odemark's Method)</h2>
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown(f"""
-        <div class="success-box">
-        <h4>✅ ค่า k ที่ใช้ในการออกแบบ JPCP:</h4>
-        <h2 style="color: #28a745; margin: 10px 0;"><b>k_eff = {k_eff:.1f} pci</b></h2>
-        <p>ค่า k นี้คำนึงถึง:</p>
-        <ul>
-        <li>✓ คุณสมบัติของดินฐาน (CBR = {cbr_sg_val}%)</li>
-        <li>✓ การรองรับจากชั้นรองพื้น (f_LS = {f_ls})</li>
-        </ul>
-        <p><b>ใช้ค่านี้ในสมการออกแบบ AASHTO 1993 เพื่อหาความหนาผิวทางคอนกรีต</b></p>
+        <div class="formula-box">
+            h<sub>e</sub> = h<sub>sb</sub> × (E<sub>sb</sub> / E<sub>sg</sub>)<sup>1/3</sup><br><br>
+            h<sub>e</sub> = {h_sb:.1f} × ({E_sb:.0f} / {E_sg:.0f})<sup>1/3</sup> = {h_sb:.1f} × {modulus_ratio**(1/3):.3f} = <b>{h_e:.2f} cm</b>
         </div>
         """, unsafe_allow_html=True)
-
-# ═══════════════════════════════════════════════════════════════
-# TAB 4: วิธีใช้ & ทฤษฎี
-# ═══════════════════════════════════════════════════════════════
-with tab4:
-    st.markdown("## 📚 คู่มือใช้งานและทฤษฎี")
     
+    with col2:
+        st.markdown("""
+        <div class="section-header">
+            <h2>🏗️ แผนผังชั้นทาง</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Layer diagram
+        layer_fig = create_layer_diagram(h_sb, h_e, E_sb, E_sg)
+        st.plotly_chart(layer_fig, use_container_width=True, config={'displayModeBar': False})
+    
+    # Chart section
     st.markdown("""
-    ### 🎯 แนวคิดหลัก (THE KEY POINT)
-    
-    #### ❌ ความเข้าใจที่ผิด:
-    - "AASHTO 1993 ต้องการให้เราลดค่า E"
-    - "เราควรลดค่า E ของ AC จาก 2500 ลงมาเป็นค่าที่น้อยกว่า"
-    - "เราเปลี่ยนแปลงคุณสมบัติของวัสดุเพื่อให้เข้ากับการออกแบบ"
-    
-    #### ✅ ความเข้าใจที่ถูกต้อง:
-    - **AASHTO 1993 ไม่ได้ใช้การวิเคราะห์ elastic layer-by-layer**
-    - **AASHTO 1993 ถาม:** "ระบบหลายชั้นนี้ เทียบเท่า reference material หนาเท่าไร?"
-    - **เราแปลง** ระบบหลายชั้น → ความหนาเทียบเท่า (equivalent thickness)
-    - **เราไม่เปลี่ยน** E หรือ h ของวัสดุจริงเลย
-    """)
-    
-    st.divider()
-    
-    st.markdown("""
-    ### 📐 สูตรวิธี Odemark (ถูกต้อง)
-    
-    #### สูตรคณิตศาสตร์:
-    $$h_e = \\sum_{i=1}^{n} h_i \\sqrt[3]{\\frac{E_i}{E_{ref}}}$$
-    
-    #### ตัวแปร:
-    - **h_i** = ความหนาจริงของชั้น i (เก็บเป็นค่าจริง!)
-    - **E_i** = โมดูลัส elastic จริงของชั้น i (เก็บเป็นค่าจริง!)
-    - **E_ref** = โมดูลัสของวัสดุอ้างอิง
-    - **h_e** = ความหนาเทียบเท่า (สิ่งที่เราคำนวณ)
-    
-    #### ความหมาย:
-    ✅ เราเก็บค่า E_i จริงไว้  
-    ✅ เราเก็บค่า h_i จริงไว้  
-    ✅ เราคำนวณ h_e = "reference material ควรหนาเท่าไร?"  
-    
-    ❌ เราไม่ลดค่า E_i  
-    ❌ เราไม่เปลี่ยน h_i  
-    """)
-    
-    st.divider()
-    
-    st.markdown("### 📊 ตัวอย่างการคำนวณ")
-    
-    example_data = {
-        "ชั้น": ["AC", "CTB", "Granular Subbase"],
-        "h จริง (cm)": [5, 20, 15],
-        "E จริง (MPa)": [2500, 1200, 300],
-        "E_ref (MPa)": [300, 300, 300],
-        "E/E_ref": [8.33, 4.00, 1.00],
-        "(E/E_ref)^(1/3)": [2.03, 1.59, 1.00],
-        "h_eq (cm)": [10.2, 31.8, 15.0]
-    }
-    
-    df_example = pd.DataFrame(example_data)
-    st.dataframe(df_example, use_container_width=True, hide_index=True)
-    
-    st.markdown(f"""
-    **รวม h จริง = 40 cm**
-    
-    **รวม h_eq = 57.0 cm** (ความหนาเทียบเท่า Granular)
-    
-    #### การแปลความหมาย:
-    ระบบ 40 cm (AC + CTB + Granular) ของอาจารย์ 
-    มีความแข็งแรงเทียบเท่ากับ **Granular ที่หนา 57 cm**
-    
-    ค่า h_eq นี้จะนำไปใช้เพื่อหาค่า k โดยใช้ตารางหรือกราฟ AASHTO
-    """)
-    
-    st.divider()
-    
-    st.markdown("""
-    ### 🔄 ขั้นตอนออกแบบแบบเต็มรูปแบบ (AASHTO 1993)
-    
-    1. **กำหนด Subgrade CBR** → คำนวณ E_SG
-    2. **คำนวณ k₁** จาก E_SG (ดินฐาน ไม่มีการรองรับ)
-    3. **กำหนดชั้นทางจริง** (h จริง และ E จริง)
-    4. **เลือกวัสดุอ้างอิง** (E_ref)
-    5. **คำนวณ h_eq** ด้วยสูตร Odemark
-    6. **กำหนดตัวประกอบการสูญเสีย** (f_LS)
-    7. **คำนวณ k_eff** = k₁ / f_LS
-    8. **ใช้ k_eff ในสมการออกแบบ AASHTO** → หาความหนาผิวทางคอนกรีต
-    
-    ✅ **เครื่องคำนวณนี้จัดการขั้นตอน 1-7 ให้ถูกต้อง**
-    """)
-    
-    st.divider()
-    
-    st.markdown("""
-    ### 🤔 ทำไม AASHTO 1993 ไม่ใช้ Multilayer Elastic Theory?
-    
-    #### เหตุผล:
-    1. **ความเรียบง่ายในทางปฏิบัติ** - ง่ายต่อการใช้ในปี 1993
-    2. **การตรวจสอบจากประวัติ** - วิธีนี้อ้างอิงจากข้อมูลเส้นทางหลายสิบปี
-    3. **ความระมัดระวัง** - ไม่ต้องคำนวณ stress-strain ที่ซับซ้อน
-    4. **ใช้ค่าเดียว (k)** - ง่ายต่อการใช้ในสมการออกแบบ
-    
-    #### หมายเหตุ:
-    **วิธีใหม่กว่า** (MEPDG/AASHTOWare) ใช้ mechanistic theory
-    
-    แต่ **AASHTO 1993 ยังคงใช้กันอย่างแพร่หลาย** ในหลายประเทศ (รวมถึงไทย)
-    """)
-    
-    st.divider()
-    
-    st.markdown("### 📋 ตารางอ้างอิง: ค่า E ของวัสดุ")
-    
-    ref_data = {
-        "วัสดุ": [
-            "คอนกรีตแอสฟัลต์ (AC)",
-            "ชั้นฐานที่เสริมซีเมนต์ (CTB)",
-            "หินผ่าปรุงแต่งด้วยซีเมนต์",
-            "ดินเสริมปูนขาว",
-            "มวลรวมทุบหรือสกัด (Granular)",
-            "ดินสกัดหรือมวลรวม",
-            "ดินแลตไรต์",
-            "ดินฐาน (CBR 5%)"
-        ],
-        "E (MPa)": [2500, 1200, 800, 400, 300, 150, 200, 55],
-        "หมายเหตุ": [
-            "มีความแข็งแรงมากที่สุด",
-            "ถือว่าดี สำหรับชั้นฐาน",
-            "แทนที่ CTB ได้",
-            "ไม่ใช้บ่อย",
-            "แนะนำเป็น Reference Material",
-            "ต่ำ เหมาะสำหรับการเปรียบเทียบ",
-            "ใช้ในอ.ต.ว. (ประเทศเมืองร้อน)",
-            "ตัวอย่าง: CBR 5%"
-        ]
-    }
-    
-    df_ref = pd.DataFrame(ref_data)
-    st.dataframe(df_ref, use_container_width=True, hide_index=True)
-    
-    st.divider()
-    
-    st.markdown("""
-    ### 📚 แหล่งอ้างอิง:
-    - **AASHTO (1993)** - Guide for Design of Pavement Structures
-    - **Odemark, N. (1974)** - Investigations of the Structural Behaviour of Asphalt Pavements
-    - **NCHRP (2004)** - Mechanistic–Empirical Design of New and Rehabilitated Pavement Structures
-    - **วิทยาลัยวิศวกรรมศาสตร์ มหาวิทยาลัยการวิทยาศาสตร์เทคโนโลยี** - มาตรฐาน JPCP ของประเทศไทย
-    """)
-
-# ═══════════════════════════════════════════════════════════════
-# Footer
-# ═══════════════════════════════════════════════════════════════
-st.divider()
-
-st.markdown("""
-    <div style="text-align: center; color: #666; font-size: 13px; margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
-        <p><b>🛣️ เครื่องคำนวณ AASHTO 1993 (วิธี Odemark)</b></p>
-        <p>สำหรับการออกแบบผิวทางคอนกรีต (JPCP) ตามมาตรฐานอเมริกัน</p>
-        <p style="font-style: italic; margin: 10px 0;">
-        "เราแปลงระบบหลายชั้น เป็นความหนาเทียบเท่าของวัสดุอ้างอิง<br>
-        ไม่ใช่ลดค่า Elastic Modulus ของวัสดุจริง"
-        </p>
-        <p style="color: #999; font-size: 12px;">
-        อัปเดต: {}  |  เวอร์ชัน 3.0 (ภาษาไทย + UI ที่ปรับปรุง)
-        </p>
+    <div class="section-header">
+        <h2>📈 กราฟความสัมพันธ์ k-value</h2>
     </div>
-""".format(datetime.now().strftime('%d/%m/%Y')), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+    
+    chart_fig = create_k_value_chart(k_sg_pci, h_e, k_composite_pci)
+    st.plotly_chart(chart_fig, use_container_width=True)
+    
+    # Calculation steps
+    with st.expander("📋 ขั้นตอนการคำนวณโดยละเอียด", expanded=False):
+        st.markdown(f"""
+        <div class="calculation-step">
+            <span class="step-indicator">1</span>
+            <strong>กำหนดค่า Input</strong><br>
+            • ความหนา Subbase (h<sub>sb</sub>) = {h_sb:.1f} cm<br>
+            • Modulus ของ Subbase (E<sub>sb</sub>) = {E_sb:.0f} MPa<br>
+            • Modulus ของ Subgrade (E<sub>sg</sub>) = {E_sg:.0f} MPa<br>
+            • k-value เริ่มต้น (k<sub>sg</sub>) = {k_sg:.1f} MPa/m ({k_sg_pci:.0f} pci)
+        </div>
+        
+        <div class="calculation-step">
+            <span class="step-indicator">2</span>
+            <strong>คำนวณอัตราส่วน Modulus</strong><br>
+            E<sub>sb</sub> / E<sub>sg</sub> = {E_sb:.0f} / {E_sg:.0f} = {modulus_ratio:.3f}
+        </div>
+        
+        <div class="calculation-step">
+            <span class="step-indicator">3</span>
+            <strong>คำนวณ Equivalent Thickness (Odemark's Method)</strong><br>
+            h<sub>e</sub> = h<sub>sb</sub> × (E<sub>sb</sub> / E<sub>sg</sub>)<sup>1/3</sup><br>
+            h<sub>e</sub> = {h_sb:.1f} × ({modulus_ratio:.3f})<sup>1/3</sup><br>
+            h<sub>e</sub> = {h_sb:.1f} × {modulus_ratio**(1/3):.4f}<br>
+            <strong>h<sub>e</sub> = {h_e:.2f} cm ({h_e_inch:.2f} inch)</strong>
+        </div>
+        
+        <div class="calculation-step">
+            <span class="step-indicator">4</span>
+            <strong>หาค่า Composite k-value จาก AASHTO Figure 3.3</strong><br>
+            จาก k<sub>sg</sub> = {k_sg_pci:.0f} pci และ h<sub>e</sub> = {h_e_inch:.1f} inch<br>
+            <strong>k<sub>eff</sub> = {k_composite_pci:.1f} pci ({k_composite:.1f} MPa/m)</strong>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Reference section
+    with st.expander("📚 ทฤษฎีและเอกสารอ้างอิง", expanded=False):
+        st.markdown("""
+        ### Odemark's Equivalent Thickness Method
+        
+        วิธีของ Odemark (1949) ใช้แปลงความหนาของชั้นทางที่มี Modulus ต่างกัน 
+        ให้เป็นความหนาเทียบเท่าของวัสดุที่มี Modulus เท่ากับชั้นดินเดิม
+        
+        **สมมติฐาน:**
+        - ชั้นทางมีความหนาสม่ำเสมอและขยายไปไม่มีที่สิ้นสุดในแนวราบ
+        - วัสดุมีคุณสมบัติเป็น Linear Elastic และ Isotropic
+        - ค่า Poisson's Ratio ของแต่ละชั้นใกล้เคียงกัน
+        
+        **ข้อจำกัด:**
+        - ไม่คำนึงถึงผลของ Bonding ระหว่างชั้น
+        - เหมาะสำหรับการประมาณค่าเบื้องต้น
+        
+        ### AASHTO 1993 Figure 3.3
+        
+        กราฟแสดงความสัมพันธ์ระหว่าง:
+        - ค่า k ของดินเดิม (Subgrade k-value)
+        - ความหนาของ Subbase
+        - ค่า k รวม (Composite k-value)
+        
+        **เอกสารอ้างอิง:**
+        - AASHTO Guide for Design of Pavement Structures, 1993
+        - Odemark, N. (1949). "Investigations as to the Elastic Properties of Soils 
+          and Design of Pavements According to the Theory of Elasticity"
+        - Huang, Y.H. (2004). "Pavement Analysis and Design", 2nd Edition
+        """)
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #666; font-family: 'Sarabun', sans-serif; padding: 1rem;">
+        <p>🎓 พัฒนาสำหรับการเรียนการสอนวิศวกรรมทาง | AASHTO 1993 Rigid Pavement Design</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+if __name__ == "__main__":
+    main()
