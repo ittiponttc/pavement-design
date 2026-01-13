@@ -130,7 +130,7 @@ st.info(
 # ======================================================
 odemark_factor = (E / E_ref) ** (1 / n_exp)
 h_eq = np.sum(h * odemark_factor)
-
+h_eq_inch = h_eq / 2.54
 st.divider()
 st.subheader("📐 ผลการคำนวณ")
 
