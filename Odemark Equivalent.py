@@ -191,6 +191,59 @@ st.bar_chart(
     df_sens.set_index("วัสดุ"),
     use_container_width=True
 )
+# ======================================================
+# แสดงวิธีการคำนวณ (เปิด / ปิด ได้)
+# ======================================================
+with st.expander("🧮 แสดงวิธีการคำนวณ (Odemark Method)", expanded=False):
+
+    st.markdown("### 1️⃣ สมการที่ใช้")
+    st.latex(
+        r"h_{eq} = \sum_{i=1}^{n} h_i \left(\frac{E_i}{E_{ref}}\right)^{1/n}"
+    )
+
+    st.markdown("### 2️⃣ ค่าที่ใช้ในการคำนวณ")
+    st.markdown(
+        f"""
+- จำนวนชั้นวัสดุ = **{n_layer} ชั้น**  
+- ค่า Odemark exponent, n = **{n_exp}**  
+- ชั้นอ้างอิง (E_ref) = **{materials[ref_index]}**  
+- ค่า E_ref = **{E_ref:.0f} MPa**
+"""
+    )
+
+    st.markdown("### 3️⃣ การคำนวณรายชั้น")
+
+    calc_rows = []
+    for i in range(n_layer):
+        factor_i = (E[i] / E_ref) ** (1 / n_exp)
+        h_eq_i = h[i] * factor_i
+
+        calc_rows.append({
+            "ชั้นที่": i + 1,
+            "วัสดุ": materials[i],
+            "hᵢ (cm)": f"{h[i]:.2f}",
+            "Eᵢ (MPa)": f"{E[i]:.0f}",
+            "(Eᵢ / E_ref)^(1/n)": f"{factor_i:.3f}",
+            "hᵢ × factor (cm)": f"{h_eq_i:.2f}"
+        })
+
+    df_calc = pd.DataFrame(calc_rows)
+    st.dataframe(df_calc, use_container_width=True)
+
+    st.markdown("### 4️⃣ ผลรวมความหนาเทียบเท่า")
+
+    st.markdown(
+        f"""
+\[
+h_{{eq}} = {h_eq:.2f}\ \text{{cm}} = {h_eq_inch:.2f}\ \text{{inch}}
+\]
+
+โดย  
+\[
+1\ \text{{inch}} = 2.54\ \text{{cm}}
+\]
+"""
+    )
 
 # ======================================================
 # Engineering conclusion
