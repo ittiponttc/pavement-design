@@ -1,49 +1,108 @@
+import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
 
-# ==============================
-# INPUT (จากผู้ใช้)
-# ==============================
-D_eq = 12.0        # equivalent thickness (inch)
-E_ref = 80000.0    # subbase modulus (psi)
-MR = 8000.0        # subgrade resilient modulus (psi)
+st.set_page_config(page_title="Composite k∞ (AASHTO)", layout="wide")
 
-# ==============================
-# Empirical AASHTO-type equation
-# ==============================
-# k_infinity = C * MR^a * E^b * D^c
+st.title("📈 Composite Modulus of Subgrade Reaction (k∞)")
+st.markdown("แนวคิดตาม **AASHTO 1993 Nomograph (Figure 3.3)**")
+
+# ======================================================
+# INPUT
+# ======================================================
+st.sidebar.header("🔧 กำหนดค่า")
+
+D_eq = st.sidebar.number_input(
+    "Equivalent thickness, D_eq (inch)",
+    min_value=4.0,
+    max_value=24.0,
+    value=12.0,
+    step=0.5
+)
+
+E_ref = st.sidebar.number_input(
+    "Subbase modulus, E_ref (psi)",
+    min_value=10000.0,
+    max_value=300000.0,
+    value=80000.0,
+    step=5000.0
+)
+
+MR = st.sidebar.number_input(
+    "Subgrade resilient modulus, M_R (psi)",
+    min_value=1000.0,
+    max_value=30000.0,
+    value=8000.0,
+    step=500.0
+)
+
+# ======================================================
+# AASHTO-type empirical model (nomograph equivalent)
+# ======================================================
 C = 0.6
 a = 0.65
 b = 0.20
 c = 0.45
 
-k_inf = C * (MR**a) * (E_ref**b) / (D_eq**c)
+k_inf = C * (MR ** a) * (E_ref ** b) / (D_eq ** c)
 
-# ==============================
-# Create reference curves (black)
-# ==============================
-D_range = np.linspace(4, 20, 100)
-k_ref = C * (MR**a) * (E_ref**b) / (D_range**c)
+st.metric(
+    "Composite modulus of subgrade reaction, k∞",
+    f"{k_inf:,.1f} pci"
+)
 
-# ==============================
-# Plot
-# ==============================
-plt.figure(figsize=(7, 8))
+# ======================================================
+# Create nomograph-like curve (black line)
+# ======================================================
+D_range = np.linspace(4, 24, 80)
+k_curve = C * (MR ** a) * (E_ref ** b) / (D_range ** c)
 
-# Standard curve (black)
-plt.loglog(D_range, k_ref, 'k-', label="Nomograph trend")
+df_curve = pd.DataFrame({
+    "D (inch)": D_range,
+    "k (pci)": k_curve
+})
 
-# User-defined point & lines (red)
-plt.axvline(D_eq, color='red', linestyle='--')
-plt.axhline(k_inf, color='red', linestyle='--')
-plt.plot(D_eq, k_inf, 'ro', label="User-defined point")
+# User-defined intersection (red point)
+df_point = pd.DataFrame({
+    "D (inch)": [D_eq],
+    "k (pci)": [k_inf]
+})
 
-plt.xlabel("Equivalent Subbase Thickness, D (inch)")
-plt.ylabel("Composite Modulus of Subgrade Reaction, k∞ (pci)")
-plt.title("Composite Modulus of Subgrade Reaction (AASHTO concept)")
-plt.grid(True, which="both", linestyle="--", alpha=0.5)
-plt.legend()
+# ======================================================
+# Plot (Cloud-safe)
+# ======================================================
+st.subheader("📊 Nomograph-equivalent Plot")
 
-plt.show()
+st.line_chart(
+    df_curve.set_index("D (inch)"),
+    use_container_width=True
+)
 
-print(f"Composite modulus k∞ = {k_inf:.1f} pci")
+st.scatter_chart(
+    df_point.set_index("D (inch)"),
+    use_container_width=True
+)
+
+# ======================================================
+# Explanation
+# ======================================================
+with st.expander("🧮 หลักการคำนวณ (Nomograph → สมการ)", expanded=False):
+
+    st.latex(
+        r"k_\infty = C \; M_R^{\,a} \; E_{SB}^{\,b} \; D_{SB}^{-c}"
+    )
+
+    st.markdown(
+        f"""
+- C = {C}  
+- a = {a} (ผลของ subgrade)  
+- b = {b} (ผลของ subbase stiffness)  
+- c = {c} (ผลของความหนา)  
+
+ค่าที่คำนวณได้:
+"""
+    )
+
+    st.latex(
+        rf"k_\infty = {k_inf:.1f}\ \mathrm{{pci}}"
+    )
