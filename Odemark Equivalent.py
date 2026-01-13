@@ -231,20 +231,15 @@ with st.expander("🧮 แสดงวิธีการคำนวณ (Odemark
     df_calc = pd.DataFrame(calc_rows)
     st.dataframe(df_calc, use_container_width=True)
 
-    st.markdown("### 4️⃣ ผลรวมความหนาเทียบเท่า")
+ st.markdown("### 4️⃣ ผลรวมความหนาเทียบเท่า")
 
-    st.markdown(
-        f"""
-\[
-h_{{eq}} = {h_eq:.2f}\ \text{{cm}} = {h_eq_inch:.2f}\ \text{{inch}}
-\]
+st.latex(
+    rf"h_{{eq}} = {h_eq:.2f}\ \mathrm{{cm}} = {h_eq_inch:.2f}\ \mathrm{{inch}}"
+)
 
-โดย  
-\[
-1\ \text{{inch}} = 2.54\ \text{{cm}}
-\]
-"""
-    )
+st.latex(
+    r"1\ \mathrm{inch} = 2.54\ \mathrm{cm}"
+)
 
 # ======================================================
 # Engineering conclusion
