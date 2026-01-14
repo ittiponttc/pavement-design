@@ -12,8 +12,8 @@ MPA_TO_PSI = 145.038
 # ฐานข้อมูลวัสดุชั้นทาง (MR : MPa)
 # =====================================================
 MATERIAL_DB = {
-    "ผิวทางลาดยาง AC": {"E_default": 2500, "E_min": 1800, "E_max": 3500},
     "ผิวทางลาดยาง PMA": {"E_default": 3700, "E_min": 2500, "E_max": 5000},
+    "ผิวทางลาดยาง AC": {"E_default": 2500, "E_min": 1800, "E_max": 3500},
     "พื้นทางซีเมนต์ CTB": {"E_default": 1200, "E_min": 800, "E_max": 2000},
     "หินคลุกผสมซีเมนต์ (UCS 24.5 ksc)": {"E_default": 850, "E_min": 600, "E_max": 1200},
     "หินคลุก CBR 80%": {"E_default": 350, "E_min": 250, "E_max": 500},
@@ -21,8 +21,15 @@ MATERIAL_DB = {
     "วัสดุหมุนเวียน (Recycling)": {"E_default": 850, "E_min": 600, "E_max": 1200},
     "รองพื้นทางวัสดุมวลรวม (CBR 25%)": {"E_default": 150, "E_min": 100, "E_max": 250},
     "วัสดุคัดเลือก ก": {"E_default": 76, "E_min": 50, "E_max": 120},
-    "ดินถมคันทาง / ดินเดิม": {"E_default": 100, "E_min": 50, "E_max": 150}
+    "ดินถมคันทาง / ดินเดิม": {"E_default": 100, "E_min": 50, "E_max": 150},
 }
+
+# =====================================================
+# ฟังก์ชัน: อัปเดต MR เมื่อเปลี่ยนชนิดวัสดุ
+# =====================================================
+def update_MR(i):
+    mat = st.session_state[f"mat_{i}"]
+    st.session_state[f"E_{i}"] = MATERIAL_DB[mat]["E_default"]
 
 # =====================================================
 # ตั้งค่าหน้าเว็บ
@@ -30,12 +37,13 @@ MATERIAL_DB = {
 st.set_page_config(page_title="Equivalent Modulus (Odemark)", layout="centered")
 st.title("การคำนวณโมดูลัสเทียบเท่าของโครงสร้างทาง")
 st.subheader("วิธี Odemark (1974)")
-st.markdown("กรอกความหนาเป็น **เซนติเมตร** และค่า **MR เป็น MPa**")
+st.markdown("กรอกความหนาเป็น **เซนติเมตร (cm)** และค่า **MR เป็น MPa**")
 
 # =====================================================
 # เลือกจำนวนชั้น
 # =====================================================
 n_layers = st.slider("จำนวนชั้นโครงสร้างทาง", 1, 5, 3)
+
 layers = []
 
 # =====================================================
@@ -44,6 +52,13 @@ layers = []
 st.markdown("### ข้อมูลชั้นทาง")
 
 for i in range(n_layers):
+
+    # ตั้งค่าเริ่มต้นครั้งแรก (กัน key error)
+    if f"mat_{i}" not in st.session_state:
+        first_mat = list(MATERIAL_DB.keys())[0]
+        st.session_state[f"mat_{i}"] = first_mat
+        st.session_state[f"E_{i}"] = MATERIAL_DB[first_mat]["E_default"]
+
     with st.expander(f"ชั้นที่ {i+1}", expanded=True):
 
         col1, col2, col3 = st.columns(3)
@@ -52,7 +67,9 @@ for i in range(n_layers):
             material = st.selectbox(
                 "ชนิดวัสดุ",
                 list(MATERIAL_DB.keys()),
-                key=f"mat_{i}"
+                key=f"mat_{i}",
+                on_change=update_MR,
+                args=(i,)
             )
 
         with col2:
@@ -65,11 +82,9 @@ for i in range(n_layers):
             )
 
         with col3:
-            E_default = MATERIAL_DB[material]["E_default"]
             MR = st.number_input(
                 "Modulus Resilient, MR (MPa)",
                 min_value=10.0,
-                value=float(E_default),
                 step=50.0,
                 key=f"E_{i}"
             )
