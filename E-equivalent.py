@@ -2,79 +2,103 @@ import streamlit as st
 import pandas as pd
 from docx import Document
 
-# =============================
+# =====================================================
 # ค่าคงที่
-# =============================
+# =====================================================
 CM_TO_INCH = 1 / 2.54
 MPA_TO_PSI = 145.038
 
-E_LIMITS = {
-    "แอสฟัลต์คอนกรีต (AC)": (1500, 5000),
-    "ชั้นปรับปรุงด้วยซีเมนต์ (CTB)": (500, 5000),
-    "ชั้นหินคลุก / วัสดุเม็ด": (100, 400),
-    "ชั้นดินเดิม (Subgrade)": (20, 150),
-    "อื่น ๆ": (0, 10000)
+# =====================================================
+# ฐานข้อมูลวัสดุชั้นทาง (MR : MPa)
+# =====================================================
+MATERIAL_DB = {
+    "ผิวทางลาดยาง AC": {"E_default": 2500, "E_min": 1800, "E_max": 3500},
+    "ผิวทางลาดยาง PMA": {"E_default": 3700, "E_min": 2500, "E_max": 5000},
+    "พื้นทางซีเมนต์ CTB": {"E_default": 1200, "E_min": 800, "E_max": 2000},
+    "หินคลุกผสมซีเมนต์ (UCS 24.5 ksc)": {"E_default": 850, "E_min": 600, "E_max": 1200},
+    "หินคลุก CBR 80%": {"E_default": 350, "E_min": 250, "E_max": 500},
+    "ดินซีเมนต์ (UCS 17.5 ksc)": {"E_default": 350, "E_min": 200, "E_max": 600},
+    "วัสดุหมุนเวียน (Recycling)": {"E_default": 850, "E_min": 600, "E_max": 1200},
+    "รองพื้นทางวัสดุมวลรวม (CBR 25%)": {"E_default": 150, "E_min": 100, "E_max": 250},
+    "วัสดุคัดเลือก ก": {"E_default": 76, "E_min": 50, "E_max": 120},
+    "ดินถมคันทาง / ดินเดิม": {"E_default": 100, "E_min": 50, "E_max": 150}
 }
 
-# =============================
-# หน้าเว็บ
-# =============================
-st.set_page_config(page_title="โมดูลัสเทียบเท่า", layout="centered")
+# =====================================================
+# ตั้งค่าหน้าเว็บ
+# =====================================================
+st.set_page_config(page_title="Equivalent Modulus (Odemark)", layout="centered")
 st.title("การคำนวณโมดูลัสเทียบเท่าของโครงสร้างทาง")
 st.subheader("วิธี Odemark (1974)")
-st.markdown("กรอกความหนาเป็น **เซนติเมตร** และโมดูลัสเป็น **MPa**")
+st.markdown("กรอกความหนาเป็น **เซนติเมตร** และค่า **MR เป็น MPa**")
 
-# =============================
-# จำนวนชั้น
-# =============================
+# =====================================================
+# เลือกจำนวนชั้น
+# =====================================================
 n_layers = st.slider("จำนวนชั้นโครงสร้างทาง", 1, 5, 3)
 layers = []
 
-# =============================
-# กรอกข้อมูล
-# =============================
-st.markdown("### ข้อมูลโครงสร้างทาง")
+# =====================================================
+# กรอกข้อมูลแต่ละชั้น
+# =====================================================
+st.markdown("### ข้อมูลชั้นทาง")
 
 for i in range(n_layers):
     with st.expander(f"ชั้นที่ {i+1}", expanded=True):
+
         col1, col2, col3 = st.columns(3)
 
         with col1:
             material = st.selectbox(
-                "ชนิดวัสดุ", list(E_LIMITS.keys()), key=f"mat{i}"
-            )
-        with col2:
-            h_cm = st.number_input(
-                "ความหนา (ซม.)", 0.1, value=10.0, step=0.5, key=f"h{i}"
-            )
-        with col3:
-            E = st.number_input(
-                "โมดูลัส E (MPa)", 1.0, value=300.0, step=50.0, key=f"E{i}"
+                "ชนิดวัสดุ",
+                list(MATERIAL_DB.keys()),
+                key=f"mat_{i}"
             )
 
-        Emin, Emax = E_LIMITS[material]
-        if not (Emin <= E <= Emax):
+        with col2:
+            thickness_cm = st.number_input(
+                "ความหนา (ซม.)",
+                min_value=0.1,
+                value=10.0,
+                step=0.5,
+                key=f"h_{i}"
+            )
+
+        with col3:
+            E_default = MATERIAL_DB[material]["E_default"]
+            MR = st.number_input(
+                "Modulus Resilient, MR (MPa)",
+                min_value=10.0,
+                value=float(E_default),
+                step=50.0,
+                key=f"E_{i}"
+            )
+
+        Emin = MATERIAL_DB[material]["E_min"]
+        Emax = MATERIAL_DB[material]["E_max"]
+
+        if not (Emin <= MR <= Emax):
             st.warning(
-                f"ค่า E = {E:.0f} MPa อยู่นอกช่วงที่พบบ่อย "
-                f"({Emin}–{Emax} MPa)"
+                f"ค่า MR = {MR:.0f} MPa อยู่นอกช่วงแนะนำ "
+                f"({Emin} – {Emax} MPa)"
             )
 
         layers.append({
             "ชั้น": f"ชั้นที่ {i+1}",
             "ชนิดวัสดุ": material,
-            "ความหนา (ซม.)": h_cm,
-            "ความหนา (นิ้ว)": h_cm * CM_TO_INCH,
-            "E (MPa)": E
+            "ความหนา (ซม.)": thickness_cm,
+            "ความหนา (นิ้ว)": thickness_cm * CM_TO_INCH,
+            "MR (MPa)": MR
         })
 
-# =============================
-# คำนวณ
-# =============================
+# =====================================================
+# ปุ่มคำนวณ
+# =====================================================
 if st.button("คำนวณโมดูลัสเทียบเท่า"):
 
     sum_h = sum(l["ความหนา (ซม.)"] for l in layers)
     sum_h_E13 = sum(
-        l["ความหนา (ซม.)"] * (l["E (MPa)"] ** (1/3)) for l in layers
+        l["ความหนา (ซม.)"] * (l["MR (MPa)"] ** (1/3)) for l in layers
     )
 
     Eeq_MPa = (sum_h_E13 / sum_h) ** 3
@@ -86,71 +110,57 @@ if st.button("คำนวณโมดูลัสเทียบเท่า"):
     st.dataframe(df, use_container_width=True)
 
     st.success(
-        f"โมดูลัสเทียบเท่า = {Eeq_psi:,.0f} psi ({Eeq_MPa:.1f} MPa)"
+        f"โมดูลัสเทียบเท่า (E_equivalent) = "
+        f"{Eeq_psi:,.0f} psi ({Eeq_MPa:.1f} MPa)"
     )
 
-    # =============================
-    # Toggle แสดงวิธีคำนวณ
-    # =============================
-    show_method = st.checkbox("แสดงวิธีการคำนวณ")
-
-    if show_method:
-        st.markdown("### วิธีการคำนวณ (Odemark, 1974)")
+    # =================================================
+    # แสดง / ซ่อน วิธีการคำนวณ
+    # =================================================
+    if st.checkbox("แสดงวิธีการคำนวณ"):
         st.latex(
             r"E_{eq} = \left( \frac{\sum h_i E_i^{1/3}}{\sum h_i} \right)^3"
         )
 
-        st.markdown("**ขั้นตอนการคำนวณ**")
         for l in layers:
             st.write(
                 f"- {l['ชั้น']} : "
                 f"h = {l['ความหนา (ซม.)']:.2f} cm, "
-                f"E = {l['E (MPa)']:.1f} MPa, "
-                f"E^(1/3) = {(l['E (MPa)']**(1/3)):.3f}"
+                f"MR = {l['MR (MPa)']:.1f} MPa, "
+                f"MR¹ᐟ³ = {(l['MR (MPa)']**(1/3)):.3f}"
             )
 
         st.write(f"Σh = {sum_h:.2f} cm")
-        st.write(f"Σ(h·E¹ᐟ³) = {sum_h_E13:.2f}")
-        st.write(
-            f"E_equivalent = {Eeq_psi:,.0f} psi ({Eeq_MPa:.1f} MPa)"
-        )
+        st.write(f"Σ(h·MR¹ᐟ³) = {sum_h_E13:.2f}")
 
-    # =============================
-    # สร้างไฟล์ Word
-    # =============================
+    # =================================================
+    # สร้างรายงาน Word
+    # =================================================
     doc = Document()
     doc.add_heading("การคำนวณโมดูลัสเทียบเท่าของโครงสร้างทาง", level=1)
     doc.add_paragraph("วิธี Odemark (1974)\n")
 
-    doc.add_heading("ข้อมูลโครงสร้างทาง", level=2)
+    doc.add_heading("ข้อมูลชั้นทาง", level=2)
     for l in layers:
         doc.add_paragraph(
-            f"{l['ชั้น']} : {l['ชนิดวัสดุ']}, "
+            f"{l['ชั้น']} : {l['ชนิดวัสดุ']} | "
             f"h = {l['ความหนา (ซม.)']:.2f} cm "
             f"({l['ความหนา (นิ้ว)']:.2f} in), "
-            f"E = {l['E (MPa)']:.1f} MPa"
+            f"MR = {l['MR (MPa)']:.1f} MPa"
         )
-
-    doc.add_heading("วิธีการคำนวณ", level=2)
-    doc.add_paragraph(
-        "E_eq = ( Σ(h·E^(1/3)) / Σh )^3"
-    )
-    doc.add_paragraph(f"Σh = {sum_h:.2f} cm")
-    doc.add_paragraph(f"Σ(h·E^(1/3)) = {sum_h_E13:.2f}")
 
     doc.add_heading("ผลการคำนวณ", level=2)
     doc.add_paragraph(
         f"E_equivalent = {Eeq_psi:,.0f} psi ({Eeq_MPa:.1f} MPa)"
     )
 
-    # บันทึกไฟล์
     file_name = "Equivalent_Modulus_Odemark.docx"
     doc.save(file_name)
 
     with open(file_name, "rb") as f:
         st.download_button(
-            label="ดาวน์โหลดรายงาน (Word)",
-            data=f,
+            "ดาวน์โหลดรายงาน (Word)",
+            f,
             file_name=file_name,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
