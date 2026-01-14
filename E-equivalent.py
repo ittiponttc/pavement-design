@@ -149,42 +149,43 @@ if st.button("คำนวณโมดูลัสเทียบเท่า"):
         st.write(f"Σ(h·MR¹ᐟ³) = {sum_h_E13:.2f}")
 
 # =============================
-    # สร้างไฟล์ Word
-    # =============================
-    doc = Document()
-    doc.add_heading("การคำนวณโมดูลัสเทียบเท่าของโครงสร้างทาง", level=1)
-    doc.add_paragraph("วิธี Odemark (1974)\n")
+# สร้างไฟล์ Word
+# =============================
+doc = Document()
+doc.add_heading("การคำนวณโมดูลัสเทียบเท่าของโครงสร้างทาง", level=1)
+doc.add_paragraph("วิธี Odemark (1974)\n")
 
-    doc.add_heading("ข้อมูลโครงสร้างทาง", level=2)
-    for l in layers:
-        doc.add_paragraph(
-            f"{l['ชั้น']} : {l['ชนิดวัสดุ']}, "
-            f"h = {l['ความหนา (ซม.)']:.2f} cm "
-            f"({l['ความหนา (นิ้ว)']:.2f} in), "
-            f"E = {l['E (MPa)']:.1f} MPa"
-        )
-
-    doc.add_heading("วิธีการคำนวณ", level=2)
+doc.add_heading("ข้อมูลโครงสร้างทาง", level=2)
+for l in layers:
     doc.add_paragraph(
-        "E_eq = ( Σ(h·E^(1/3)) / Σh )^3"
-    )
-    doc.add_paragraph(f"Σh = {sum_h:.2f} cm")
-    doc.add_paragraph(f"Σ(h·E^(1/3)) = {sum_h_E13:.2f}")
-
-    doc.add_heading("ผลการคำนวณ", level=2)
-    doc.add_paragraph(
-        f"E_equivalent = {Eeq_psi:,.0f} psi ({Eeq_MPa:.1f} MPa)"
+        f"{l['ชั้น']} : {l['ชนิดวัสดุ']}, "
+        f"h = {l['ความหนา (ซม.)']:.2f} cm "
+        f"({l['ความหนา (นิ้ว)']:.2f} in), "
+        f"MR = {l['MR (MPa)']:.1f} MPa"
     )
 
-    # บันทึกไฟล์
-    file_name = "Equivalent_Modulus_Odemark.docx"
-    doc.save(file_name)
+doc.add_heading("วิธีการคำนวณ", level=2)
+doc.add_paragraph(
+    "E_eq = ( Σ(h·E^(1/3)) / Σh )^3"
+)
+doc.add_paragraph(f"Σh = {sum_h:.2f} cm")
+doc.add_paragraph(f"Σ(h·E^(1/3)) = {sum_h_E13:.2f}")
 
-    with open(file_name, "rb") as f:
-        st.download_button(
-            label="ดาวน์โหลดรายงาน (Word)",
-            data=f,
-            file_name=file_name,
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+doc.add_heading("ผลการคำนวณ", level=2)
+doc.add_paragraph(
+    f"E_equivalent = {Eeq_psi:,.0f} psi ({Eeq_MPa:.1f} MPa)"
+)
+
+# บันทึกไฟล์
+file_name = "Equivalent_Modulus_Odemark.docx"
+doc.save(file_name)
+
+with open(file_name, "rb") as f:
+    st.download_button(
+        label="ดาวน์โหลดรายงาน (Word)",
+        data=f,
+        file_name=file_name,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
 
