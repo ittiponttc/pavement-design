@@ -1,9 +1,9 @@
 """
 โปรแกรมออกแบบและตรวจสอบความหนาถนนคอนกรีต (Rigid Pavement)
 ตามวิธี AASHTO 1993
-รองรับทั้ง JPCP (Jointed Plain Concrete Pavement) JRCP (Jointed Reinforced Concrete Pavement) และ CRCP (Continuously Reinforced Concrete Pavement)
+รองรับทั้ง JPCP (Jointed Plain Concrete Pavement) และ CRCP (Continuously Reinforced Concrete Pavement)
 
-พัฒนาสำหรับใช้ในการเรียนการสอน โดย รศ.ดร.อิทธิพล มีผล
+พัฒนาสำหรับใช้ในการเรียนการสอน
 ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ
 """
 
@@ -39,10 +39,10 @@ ZR_TABLE = {
 # ค่า Load Transfer Coefficient (J) ตามประเภทถนนและการถ่ายแรง
 # อ้างอิง: AASHTO 1993 Guide, Table 2.6
 J_VALUES = {
-    "JPCP + Dowel + Tied Shoulder": 2.8,
+    "JPCP + Dowel + Tied Shoulder": 2.7,
     "JPCP + Dowel Bar (AC Shoulder)": 3.2,
     "JPCP ไม่มี Dowel Bar": 3.8,
-    "CRCP + Tied Shoulder": 2.5,
+    "CRCP + Tied Shoulder": 2.3,
     "CRCP (AC Shoulder)": 2.9
 }
 
@@ -56,7 +56,7 @@ CD_DEFAULT = 1.0
 def convert_cube_to_cylinder(fc_cube_ksc: float) -> float:
     """
     แปลงกำลังอัดคอนกรีตจาก Cube เป็น Cylinder
-    fc_cylinder ≈ 0.833 × fc_cube (โดยประมาณ)
+    fc_cylinder ≈ 0.8 × fc_cube (โดยประมาณ)
     
     Parameters:
         fc_cube_ksc: กำลังอัดคอนกรีต Cube (ksc)
@@ -395,7 +395,7 @@ def create_word_report(
     - ค่า J สำหรับ JPCP + Dowel + Tied Shoulder = 2.7, JPCP + Dowel (AC Shoulder) = 3.2
     - การแปลงกำลังคอนกรีต: f'c (cylinder) ≈ 0.8 × f'c (cube)
     - Ec = 57,000 × √f'c (psi) ตาม ACI 318
-    - Sc ≈ 10 × √f'c (psi) ใช้ไม่เกิน 600 psi
+    - Sc ≈ 10 × √f'c (psi)
     """
     doc.add_paragraph(notes)
     
@@ -444,6 +444,24 @@ def main():
         # ชั้นโครงสร้างทาง (Pavement Layers)
         st.subheader("🔶 ชั้นโครงสร้างทาง (Pavement Layers)")
         
+        # ตารางค่า Modulus ตามประเภทวัสดุ (ตามข้อมูลอาจารย์)
+        MATERIAL_MODULUS = {
+            "ผิวทางลาดยาง AC": 2500,
+            "ผิวทางลาดยาง PMA": 3700,
+            "พื้นทางซีเมนต์ CTB": 1200,
+            "หินคลุกผสมซีเมนต์ UCS 24.5 ksc": 850,
+            "หินคลุก CBR 80%": 350,
+            "ดินซีเมนต์ UCS 17.5 ksc": 350,
+            "วัสดุหมุนเวียน (Recycling)": 850,
+            "รองพื้นทางวัสดุมวลรวม CBR 25%": 150,
+            "วัสดุคัดเลือก ก": 76,
+            "ดินถมคันทาง / ดินเดิม": 100,
+            "กำหนดเอง...": 100,
+        }
+        
+        # รายการวัสดุสำหรับ dropdown
+        material_options = list(MATERIAL_MODULUS.keys())
+        
         # จำนวนชั้นวัสดุ
         num_layers = st.slider(
             "จำนวนชั้นวัสดุใต้แผ่นคอนกรีต",
@@ -455,37 +473,46 @@ def main():
         
         # ค่า Default สำหรับแต่ละชั้น
         default_layers = [
-            {"name": "Asphalt Treated Base", "thickness_cm": 5, "E_MPa": 2500},
-            {"name": "Cement Treated Base", "thickness_cm": 20, "E_MPa": 1200},
-            {"name": "Crusite Base", "thickness_cm": 15, "E_MPa": 150},
-            {"name": "Granular Subbase", "thickness_cm": 25, "E_MPa": 80},
-            {"name": "Selected Material", "thickness_cm": 30, "E_MPa": 50},
-            {"name": "Subgrade", "thickness_cm": 0, "E_MPa": 30},
+            {"name": "ผิวทางลาดยาง AC", "thickness_cm": 5},
+            {"name": "พื้นทางซีเมนต์ CTB", "thickness_cm": 20},
+            {"name": "หินคลุก CBR 80%", "thickness_cm": 15},
+            {"name": "รองพื้นทางวัสดุมวลรวม CBR 25%", "thickness_cm": 25},
+            {"name": "วัสดุคัดเลือก ก", "thickness_cm": 30},
+            {"name": "ดินถมคันทาง / ดินเดิม", "thickness_cm": 0},
         ]
         
         # เก็บข้อมูลชั้นวัสดุ
         layers_data = []
         
-        with st.expander("📊 ตารางค่า Modulus แนะนำ", expanded=False):
+        with st.expander("📊 ตารางค่า Modulus อ้างอิง", expanded=False):
             st.markdown("""
-            | ประเภทวัสดุ | E (MPa) |
-            |------------|---------|
-            | Asphalt Treated Base | 1,500 - 3,000 |
-            | Cement Treated Base | 1,000 - 2,000 |
-            | Crushed Stone Base | 100 - 300 |
-            | Granular Subbase | 50 - 150 |
-            | Selected Material | 30 - 80 |
-            | Subgrade (ดินเดิม) | 20 - 50 |
+            | วัสดุชั้นทาง | MR (MPa) |
+            |-------------|----------|
+            | ผิวทางลาดยาง AC | 2,500 |
+            | ผิวทางลาดยาง PMA | 3,700 |
+            | พื้นทางซีเมนต์ CTB | 1,200 |
+            | หินคลุกผสมซีเมนต์ UCS 24.5 ksc | 850 |
+            | หินคลุก CBR 80% | 350 |
+            | ดินซีเมนต์ UCS 17.5 ksc | 350 |
+            | วัสดุหมุนเวียน (Recycling) | 850 |
+            | รองพื้นทางวัสดุมวลรวม CBR 25% | 150 |
+            | วัสดุคัดเลือก ก | 76 |
+            | ดินถมคันทาง / ดินเดิม | 100 |
             """)
         
         for i in range(num_layers):
             st.markdown(f"**ชั้นที่ {i+1}**")
             col_a, col_b, col_c = st.columns([2, 1, 1])
             
+            # หา default index สำหรับ dropdown
+            default_name = default_layers[i]["name"] if i < len(default_layers) else "กำหนดเอง..."
+            default_index = material_options.index(default_name) if default_name in material_options else len(material_options) - 1
+            
             with col_a:
-                layer_name = st.text_input(
-                    f"ชื่อวัสดุ",
-                    value=default_layers[i]["name"] if i < len(default_layers) else f"Layer {i+1}",
+                layer_name = st.selectbox(
+                    f"เลือกวัสดุ",
+                    options=material_options,
+                    index=default_index,
                     key=f"layer_name_{i}"
                 )
             
@@ -498,13 +525,18 @@ def main():
                     key=f"layer_thick_{i}"
                 )
             
+            # หาค่า Modulus จากวัสดุที่เลือก
+            recommended_modulus = MATERIAL_MODULUS.get(layer_name, 100)
+            
             with col_c:
+                # ใช้ key ที่รวม layer_name เพื่อให้ reset เมื่อเปลี่ยนวัสดุ
                 layer_modulus = st.number_input(
                     f"E (MPa)",
                     min_value=10,
                     max_value=10000,
-                    value=default_layers[i]["E_MPa"] if i < len(default_layers) else 100,
-                    key=f"layer_E_{i}"
+                    value=recommended_modulus,
+                    key=f"layer_E_{i}_{layer_name}",
+                    help=f"ค่าแนะนำ: {recommended_modulus:,} MPa"
                 )
             
             layers_data.append({
@@ -695,9 +727,9 @@ def main():
             st.markdown("""
             | ประเภทถนน | J (Tied Shoulder) | J (AC Shoulder) |
             |-----------|-------------------|-----------------|
-            | JPCP/JRCP + Dowel Bar | 2.5-3.1 | 3.2 |
-            | JPCP/JRCP ไม่มี Dowel | 3.2 | 3.8-4.4 |
-            | CRCP | 2.3-2.9 | 2.9-3.2 |
+            | JPCP + Dowel Bar | 2.7 | 3.2 |
+            | JPCP ไม่มี Dowel | 3.2 | 3.8-4.4 |
+            | CRCP | 2.3 | 2.9 |
             
             **หมายเหตุ:** ค่า J ต่ำ = การถ่ายแรงดี = รองรับ ESAL ได้มากขึ้น
             """)
