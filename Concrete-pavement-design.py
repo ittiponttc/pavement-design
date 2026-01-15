@@ -3,7 +3,7 @@
 ตามวิธี AASHTO 1993
 รองรับทั้ง JPCP (Jointed Plain Concrete Pavement) และ CRCP (Continuously Reinforced Concrete Pavement)
 
-พัฒนาสำหรับใช้ในการเรียนการสอน โดย รศ.ดร.อิทธิพล มีผล
+พัฒนาสำหรับใช้ในการเรียนการสอน
 ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ
 """
 
@@ -11,6 +11,9 @@ import streamlit as st
 import math
 from io import BytesIO
 from datetime import datetime
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib import rcParams
 
 # ============================================================
 # ส่วนที่ 1: ค่าคงที่และตารางอ้างอิง AASHTO 1993
@@ -39,10 +42,10 @@ ZR_TABLE = {
 # ค่า Load Transfer Coefficient (J) ตามประเภทถนนและการถ่ายแรง
 # อ้างอิง: AASHTO 1993 Guide, Table 2.6
 J_VALUES = {
-    "JPCP + Dowel + Tied Shoulder": 2.8,
+    "JPCP + Dowel + Tied Shoulder": 2.7,
     "JPCP + Dowel Bar (AC Shoulder)": 3.2,
     "JPCP ไม่มี Dowel Bar": 3.8,
-    "CRCP + Tied Shoulder": 2.5,
+    "CRCP + Tied Shoulder": 2.3,
     "CRCP (AC Shoulder)": 2.9
 }
 
@@ -56,7 +59,7 @@ CD_DEFAULT = 1.0
 def convert_cube_to_cylinder(fc_cube_ksc: float) -> float:
     """
     แปลงกำลังอัดคอนกรีตจาก Cube เป็น Cylinder
-    fc_cylinder ≈ 0.833 × fc_cube (โดยประมาณ)
+    fc_cylinder ≈ 0.8 × fc_cube (โดยประมาณ)
     
     Parameters:
         fc_cube_ksc: กำลังอัดคอนกรีต Cube (ksc)
@@ -64,7 +67,7 @@ def convert_cube_to_cylinder(fc_cube_ksc: float) -> float:
     Returns:
         กำลังอัดคอนกรีต Cylinder (ksc)
     """
-    return 0.833 * fc_cube_ksc
+    return 0.8 * fc_cube_ksc
 
 
 def calculate_concrete_modulus(fc_cylinder_ksc: float) -> float:
@@ -215,6 +218,179 @@ def check_design(w18_required: float, w18_capacity: float) -> tuple:
     ratio = w18_capacity / w18_required if w18_required > 0 else float('inf')
     passed = w18_capacity >= w18_required
     return (passed, ratio)
+
+
+def create_pavement_structure_figure(layers_data: list, concrete_thickness_cm: float = None):
+    """
+    สร้างรูปโครงสร้างชั้นทาง
+    
+    Parameters:
+        layers_data: รายการข้อมูลชั้นวัสดุ [{"name": ..., "thickness_cm": ..., "E_MPa": ...}, ...]
+        concrete_thickness_cm: ความหนาแผ่นคอนกรีต (ซม.) ถ้ามี
+    
+    Returns:
+        matplotlib figure
+    """
+    # แปลงชื่อวัสดุเป็นภาษาอังกฤษสำหรับแสดงในรูป
+    THAI_TO_ENG = {
+        "ผิวทางลาดยาง AC": "AC Surface",
+        "ผิวทางลาดยาง PMA": "PMA Surface",
+        "พื้นทางซีเมนต์ CTB": "Cement Treated Base",
+        "หินคลุกผสมซีเมนต์ UCS 24.5 ksc": "Soil Cement",
+        "หินคลุก CBR 80%": "Crushed Rock Base",
+        "ดินซีเมนต์ UCS 17.5 ksc": "Soil Cement",
+        "วัสดุหมุนเวียน (Recycling)": "Recycled Material",
+        "รองพื้นทางวัสดุมวลรวม CBR 25%": "Aggregate Subbase",
+        "วัสดุคัดเลือก ก": "Selected Material",
+        "ดินถมคันทาง / ดินเดิม": "Subgrade",
+        "กำหนดเอง...": "Custom Material",
+        "แผ่นคอนกรีต": "Concrete Slab",
+        "Concrete Slab": "Concrete Slab",
+    }
+    
+    # สีสำหรับแต่ละประเภทวัสดุ
+    LAYER_COLORS = {
+        "ผิวทางลาดยาง AC": "#2C3E50",
+        "ผิวทางลาดยาง PMA": "#1A252F",
+        "พื้นทางซีเมนต์ CTB": "#7F8C8D",
+        "หินคลุกผสมซีเมนต์ UCS 24.5 ksc": "#95A5A6",
+        "หินคลุก CBR 80%": "#BDC3C7",
+        "ดินซีเมนต์ UCS 17.5 ksc": "#AAB7B8",
+        "วัสดุหมุนเวียน (Recycling)": "#85929E",
+        "รองพื้นทางวัสดุมวลรวม CBR 25%": "#D5DBDB",
+        "วัสดุคัดเลือก ก": "#E8DAEF",
+        "ดินถมคันทาง / ดินเดิม": "#F5CBA7",
+        "กำหนดเอง...": "#FADBD8",
+        "Concrete Slab": "#5DADE2",
+    }
+    
+    # กรองเฉพาะชั้นที่มีความหนา > 0
+    valid_layers = [l for l in layers_data if l.get("thickness_cm", 0) > 0]
+    
+    # เพิ่มชั้นคอนกรีตถ้ามี
+    all_layers = []
+    if concrete_thickness_cm and concrete_thickness_cm > 0:
+        all_layers.append({
+            "name": "Concrete Slab",
+            "thickness_cm": concrete_thickness_cm,
+            "E_MPa": None
+        })
+    all_layers.extend(valid_layers)
+    
+    if not all_layers:
+        return None
+    
+    # คำนวณความหนารวม
+    total_thickness = sum(l.get("thickness_cm", 0) for l in all_layers)
+    
+    # ใช้ scale factor เพื่อให้ชั้นบางๆ ยังมองเห็นได้
+    min_display_height = 8  # ความสูงขั้นต่ำในการแสดงผล
+    
+    # สร้าง figure
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # กำหนดขนาดรูป
+    width = 3  # ความกว้างของชั้นทาง
+    x_center = 6  # ตำแหน่ง x กึ่งกลาง
+    x_start = x_center - width / 2
+    
+    # คำนวณความสูงที่ใช้แสดงผล
+    display_heights = []
+    for layer in all_layers:
+        thickness = layer.get("thickness_cm", 0)
+        display_h = max(thickness, min_display_height)
+        display_heights.append(display_h)
+    
+    total_display = sum(display_heights)
+    y_current = total_display
+    
+    # วาดแต่ละชั้น
+    for i, layer in enumerate(all_layers):
+        thickness = layer.get("thickness_cm", 0)
+        name = layer.get("name", f"Layer {i+1}")
+        e_mpa = layer.get("E_MPa", None)
+        display_h = display_heights[i]
+        
+        if thickness <= 0:
+            continue
+        
+        # หาสี
+        color = LAYER_COLORS.get(name, "#CCCCCC")
+        
+        # วาดสี่เหลี่ยม
+        y_bottom = y_current - display_h
+        rect = patches.Rectangle(
+            (x_start, y_bottom), 
+            width, 
+            display_h,
+            linewidth=2,
+            edgecolor='black',
+            facecolor=color
+        )
+        ax.add_patch(rect)
+        
+        # เพิ่มข้อความ
+        y_center_pos = y_bottom + display_h / 2
+        
+        # แปลงชื่อเป็นภาษาอังกฤษ
+        display_name = THAI_TO_ENG.get(name, name)
+        
+        # กำหนดสีข้อความตามสีพื้นหลัง
+        is_dark = name in ["ผิวทางลาดยาง AC", "ผิวทางลาดยาง PMA", "Concrete Slab", 
+                          "พื้นทางซีเมนต์ CTB", "หินคลุกผสมซีเมนต์ UCS 24.5 ksc",
+                          "วัสดุหมุนเวียน (Recycling)"]
+        text_color = 'white' if is_dark else 'black'
+        
+        # ข้อความในกล่อง (ความหนา)
+        ax.text(x_center, y_center_pos, f"{thickness} cm",
+                ha='center', va='center', fontsize=11, fontweight='bold', color=text_color)
+        
+        # ข้อความด้านซ้าย (ชื่อวัสดุ)
+        ax.text(x_start - 0.5, y_center_pos, display_name,
+                ha='right', va='center', fontsize=10, fontweight='bold', color='black')
+        
+        # ข้อความด้านขวา (E value)
+        if e_mpa:
+            ax.text(x_start + width + 0.5, y_center_pos, f"E = {e_mpa:,} MPa",
+                    ha='left', va='center', fontsize=10, color='#0066CC')
+        
+        y_current = y_bottom
+    
+    # วาดเส้นบอกขนาดรวมด้านขวาสุด
+    ax.annotate('', xy=(x_start + width + 3.5, total_display), 
+                xytext=(x_start + width + 3.5, 0),
+                arrowprops=dict(arrowstyle='<->', color='red', lw=2))
+    ax.text(x_start + width + 4, total_display / 2, f"Total\n{total_thickness} cm",
+            ha='left', va='center', fontsize=12, color='red', fontweight='bold')
+    
+    # ตั้งค่า axes
+    margin = 10
+    ax.set_xlim(0, 14)
+    ax.set_ylim(-margin, total_display + margin)
+    ax.axis('off')
+    
+    # หัวข้อ
+    ax.set_title('Pavement Structure', 
+                 fontsize=18, fontweight='bold', pad=20)
+    
+    # เพิ่มข้อความความหนารวมด้านล่าง
+    ax.text(x_center, -margin + 4, 
+            f"Total Pavement Thickness: {total_thickness} cm",
+            ha='center', va='center', fontsize=13, fontweight='bold',
+            bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.9, edgecolor='orange'))
+    
+    plt.tight_layout()
+    
+    return fig
+
+
+def save_figure_to_bytes(fig):
+    """บันทึก matplotlib figure เป็น bytes สำหรับดาวน์โหลด"""
+    buf = BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', 
+                facecolor='white', edgecolor='none')
+    buf.seek(0)
+    return buf
 
 
 # ============================================================
@@ -392,9 +568,10 @@ def create_word_report(
     notes = """
     - การคำนวณนี้ใช้หลักการตามคู่มือ AASHTO Guide for Design of Pavement Structures (1993)
     - สมการ: log₁₀(W₁₈) รวม term (D^0.75 - 1.132) ในตัวเศษ
+    - ค่า J สำหรับ JPCP + Dowel + Tied Shoulder = 2.7, JPCP + Dowel (AC Shoulder) = 3.2
     - การแปลงกำลังคอนกรีต: f'c (cylinder) ≈ 0.8 × f'c (cube)
     - Ec = 57,000 × √f'c (psi) ตาม ACI 318
-    - Sc ≈ 10 × √f'c (psi) ใช้ไม่เกิน 600 psi
+    - Sc ≈ 10 × √f'c (psi)
     """
     doc.add_paragraph(notes)
     
@@ -435,7 +612,7 @@ def main():
             "ประเภทถนนคอนกรีต",
             options=list(J_VALUES.keys()),
             index=0,
-            help="JPCP = Jointed Plain Concrete Pavement,JRCP = Jointed Reinforced Concrete Pavement, CRCP = Continuously Reinforced Concrete Pavement"
+            help="JPCP = Jointed Plain Concrete Pavement, CRCP = Continuously Reinforced Concrete Pavement"
         )
         
         st.markdown("---")
@@ -543,6 +720,25 @@ def main():
                 "thickness_cm": layer_thickness,
                 "E_MPa": layer_modulus
             })
+        
+        # แสดงรูปโครงสร้างชั้นทาง
+        st.markdown("**📐 รูปโครงสร้างชั้นทาง**")
+        
+        # สร้างรูป
+        fig_structure = create_pavement_structure_figure(layers_data, concrete_thickness_cm=None)
+        
+        if fig_structure:
+            st.pyplot(fig_structure)
+            
+            # ปุ่มดาวน์โหลดรูป
+            img_buffer = save_figure_to_bytes(fig_structure)
+            st.download_button(
+                label="📥 ดาวน์โหลดรูปโครงสร้างชั้นทาง",
+                data=img_buffer,
+                file_name=f"pavement_structure_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
+                mime="image/png"
+            )
+            plt.close(fig_structure)
         
         st.markdown("---")
         
@@ -709,7 +905,7 @@ def main():
             value=int(round(sc_auto)),
             step=10,
             format="%d",
-            help="ค่าเริ่มต้นคำนวณจาก 10×√f'c ... DOH กำหนดให้ใช้ไม่เกิน 600 psi"
+            help="ค่าเริ่มต้นคำนวณจาก 10×√f'c สามารถแก้ไขได้ตามผลทดสอบจริง"
         )
         
         st.markdown("---")
@@ -724,11 +920,11 @@ def main():
         # ตารางอ้างอิงค่า J
         with st.expander("📊 ตารางค่า Load Transfer Coefficient (J)"):
             st.markdown("""
-            | ประเภทถนน | J (Tied P.C.C | J (AC Shoulder) |
+            | ประเภทถนน | J (Tied Shoulder) | J (AC Shoulder) |
             |-----------|-------------------|-----------------|
-            | JPCP/JRCP + Dowel Bar | 2.5-3.1 | 3.2 |
-            | JPCP/JRCP ไม่มี Dowel | 3.6-4.2 | 3.8-4.4 |
-            | CRCP | 2.3-2.9 | 2.9-3.2 |
+            | JPCP + Dowel Bar | 2.7 | 3.2 |
+            | JPCP ไม่มี Dowel | 3.2 | 3.8-4.4 |
+            | CRCP | 2.3 | 2.9 |
             
             **หมายเหตุ:** ค่า J ต่ำ = การถ่ายแรงดี = รองรับ ESAL ได้มากขึ้น
             """)
