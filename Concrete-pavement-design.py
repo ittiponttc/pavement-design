@@ -1,9 +1,9 @@
 """
 โปรแกรมออกแบบและตรวจสอบความหนาถนนคอนกรีต (Rigid Pavement)
 ตามวิธี AASHTO 1993
-รองรับทั้ง JPCP (Jointed Plain Concrete Pavement) และ CRCP (Continuously Reinforced Concrete Pavement)
+รองรับทั้ง JPCP (Jointed Plain Concrete Pavement) JRCP (Jointed Reinforced Concrete Pavement) และ CRCP (Continuously Reinforced Concrete Pavement)
 
-พัฒนาสำหรับใช้ในการเรียนการสอน
+พัฒนาสำหรับใช้ในการเรียนการสอน โดย รศ.ดร.อิทธิพล มีผล
 ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ
 """
 
