@@ -163,6 +163,35 @@ if st.button("คำนวณโมดูลัสเทียบเท่า"):
             f"({l['ความหนา (นิ้ว)']:.2f} in), "
             f"MR = {l['MR (MPa)']:.1f} MPa"
         )
+doc.add_heading("วิธีการคำนวณ (Odemark, 1974)", level=2)
+
+doc.add_paragraph(
+    "การคำนวณโมดูลัสเทียบเท่าใช้แนวคิดของ Odemark (1974) "
+    "โดยคำนวณจากค่า Modulus Resilient (MR) และความหนาของแต่ละชั้นทาง "
+    "ตามสมการต่อไปนี้"
+)
+
+doc.add_paragraph(
+    "E_eq = ( Σ(h_i · E_i^(1/3)) / Σh_i )^3"
+)
+
+doc.add_paragraph("โดยที่")
+doc.add_paragraph("h_i = ความหนาของชั้นที่ i (cm)")
+doc.add_paragraph("E_i = Modulus Resilient (MR) ของชั้นที่ i (MPa)")
+doc.add_paragraph("E_eq = โมดูลัสเทียบเท่าของโครงสร้างทาง")
+
+doc.add_paragraph("ขั้นตอนการคำนวณ")
+
+for l in layers:
+    doc.add_paragraph(
+        f"- {l['ชั้น']} ({l['ชนิดวัสดุ']}): "
+        f"h = {l['ความหนา (ซม.)']:.2f} cm, "
+        f"MR = {l['MR (MPa)']:.1f} MPa, "
+        f"MR^(1/3) = {(l['MR (MPa)']**(1/3)):.3f}"
+    )
+
+doc.add_paragraph(f"Σh = {sum_h:.2f} cm")
+doc.add_paragraph(f"Σ(h·MR^(1/3)) = {sum_h_E13:.2f}")
 
     doc.add_heading("ผลการคำนวณ", level=2)
     doc.add_paragraph(
