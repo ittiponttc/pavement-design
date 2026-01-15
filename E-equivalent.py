@@ -153,7 +153,7 @@ if st.button("คำนวณโมดูลัสเทียบเท่า"):
     # =================================================
     doc = Document()
     doc.add_heading("การคำนวณโมดูลัสเทียบเท่าของโครงสร้างทาง", level=1)
-    
+    doc.add_paragraph("วิธี Odemark (1974)\n")
 
     # ---------- ข้อมูลชั้นทาง ----------
     doc.add_heading("ข้อมูลชั้นทาง", level=2)
@@ -166,7 +166,7 @@ if st.button("คำนวณโมดูลัสเทียบเท่า"):
         )
 
     # ---------- วิธีการคำนวณ ----------
-    doc.add_heading("วิธีการคำนวณ (Odemark, 1974)", level=2)
+    doc.add_heading("วิธีการคำนวณ เพื่อหาค่า E_equivalent", level=2)
     doc.add_paragraph(
         "E_eq = ( Σ(h_i · E_i^(1/3)) / Σh_i )^3"
     )
