@@ -37,7 +37,7 @@ def update_MR(i):
 st.set_page_config(page_title="Equivalent Modulus (Odemark)", layout="centered")
 st.title("การคำนวณโมดูลัสเทียบเท่าของโครงสร้างทาง")
 st.subheader("วิธี Odemark (1974)")
-st.markdown("กรอกความหนาเป็น **เซนติเมตร (cm)** และค่า **MR เป็น MPa**")
+st.markdown("พัฒนาโดย รศ.ดร.อิทธิพล มีผล // ภาควิชาครุศาสตร์โยธา  มจพ.")
 
 # =====================================================
 # เลือกจำนวนชั้น
