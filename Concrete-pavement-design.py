@@ -39,10 +39,10 @@ ZR_TABLE = {
 # ค่า Load Transfer Coefficient (J) ตามประเภทถนนและการถ่ายแรง
 # อ้างอิง: AASHTO 1993 Guide, Table 2.6
 J_VALUES = {
-    "JPCP/JRCP + Dowel + Tied P.C.C." 2.8,
+    "JPCP/JRCP + Dowel + Tied Shoulder" 2.8,
     "JPCP/JRCP + Dowel Bar (AC Shoulder)": 3.2,
     "JPCP/JRCP ไม่มี Dowel Bar": 3.8,
-    "CRCP + Tied P.C.C.: 2.5,
+    "CRCP + Tied Shoulder: 2.5,
     "CRCP (AC Shoulder)": 2.9
 }
 
