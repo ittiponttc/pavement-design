@@ -307,7 +307,7 @@ def create_word_report(
     hdr_cells2[3].text = 'หน่วย'
     
     calc_data = [
-        ('กำลังคอนกรีต (Cylinder)', "f'c (cyl)", f"{calculated_values['fc_cylinder']:,.0f}", 'ksc'),
+     
         ('Modulus of Elasticity', 'Ec', f"{calculated_values['ec']:,.0f}", 'psi'),
         ('Standard Normal Deviate', 'ZR', f"{calculated_values['zr']:.3f}", '-'),
         ('การสูญเสีย Serviceability', 'ΔPSI', f"{calculated_values['delta_psi']:.1f}", '-'),
