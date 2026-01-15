@@ -395,7 +395,7 @@ def create_word_report(
     - ค่า J สำหรับ JPCP + Dowel + Tied Shoulder = 2.7, JPCP + Dowel (AC Shoulder) = 3.2
     - การแปลงกำลังคอนกรีต: f'c (cylinder) ≈ 0.8 × f'c (cube)
     - Ec = 57,000 × √f'c (psi) ตาม ACI 318
-    - Sc ≈ 10 × √f'c (psi)
+    - Sc ≈ 10 × √f'c (psi) ใช้ไม่เกิน 600 psi
     """
     doc.add_paragraph(notes)
     
