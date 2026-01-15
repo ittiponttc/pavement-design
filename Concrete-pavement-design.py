@@ -227,7 +227,8 @@ def create_word_report(
     calculated_values: dict,
     comparison_results: list,
     selected_d: float,
-    main_result: tuple
+    main_result: tuple,
+    layers_data: list = None
 ) -> BytesIO:
     """
     สร้างรายงานการคำนวณในรูปแบบไฟล์ Word (.docx)
@@ -265,8 +266,29 @@ def create_word_report(
     doc.add_paragraph(f'ประเภทถนน: {pavement_type}')
     doc.add_paragraph(f'วันที่คำนวณ: {datetime.now().strftime("%d/%m/%Y %H:%M")}')
     
+    # ตารางชั้นโครงสร้างทาง
+    if layers_data and len(layers_data) > 0:
+        doc.add_heading('2. ชั้นโครงสร้างทาง (Pavement Layers)', level=1)
+        
+        table_layers = doc.add_table(rows=1, cols=4)
+        table_layers.style = 'Table Grid'
+        hdr_layers = table_layers.rows[0].cells
+        hdr_layers[0].text = 'ลำดับ'
+        hdr_layers[1].text = 'ชนิดวัสดุ'
+        hdr_layers[2].text = 'ความหนา (ซม.)'
+        hdr_layers[3].text = 'Modulus E (MPa)'
+        
+        for i, layer in enumerate(layers_data):
+            row_cells = table_layers.add_row().cells
+            row_cells[0].text = str(i + 1)
+            row_cells[1].text = layer.get('name', f'Layer {i+1}')
+            row_cells[2].text = f"{layer.get('thickness_cm', 0)}"
+            row_cells[3].text = f"{layer.get('E_MPa', 0):,}"
+        
+        doc.add_paragraph('')  # เว้นบรรทัด
+    
     # ข้อมูลนำเข้า
-    doc.add_heading('2. ข้อมูลนำเข้า (Input Parameters)', level=1)
+    doc.add_heading('3. ข้อมูลนำเข้า (Input Parameters)', level=1)
     
     table1 = doc.add_table(rows=1, cols=4)
     table1.style = 'Table Grid'
@@ -282,6 +304,7 @@ def create_word_report(
         ('Reliability', 'R', f"{inputs['reliability']:.0f}", '%'),
         ('Standard Deviation', 'So', f"{inputs['so']:.2f}", '-'),
         ('Modulus of Subgrade Reaction', 'k_eff', f"{inputs['k_eff']:,.0f}", 'pci'),
+        ('Loss of Support', 'LS', f"{inputs.get('ls', 1.0):.1f}", '-'),
         ('กำลังคอนกรีต', "f'c", f"{inputs['fc_cube']:.0f} Cube ({int(inputs['fc_cube']*0.8)} Cyl.)", 'ksc'),
         ('Modulus of Rupture', 'Sc', f"{inputs['sc']:.0f}", 'psi'),
         ('Load Transfer Coefficient', 'J', f"{inputs['j']:.1f}", '-'),
@@ -296,7 +319,7 @@ def create_word_report(
         row_cells[3].text = unit
     
     # ค่าที่คำนวณได้
-    doc.add_heading('3. ค่าที่คำนวณได้ (Calculated Values)', level=1)
+    doc.add_heading('4. ค่าที่คำนวณได้ (Calculated Values)', level=1)
     
     table2 = doc.add_table(rows=1, cols=4)
     table2.style = 'Table Grid'
@@ -320,7 +343,7 @@ def create_word_report(
         row_cells[3].text = unit
     
     # สมการ AASHTO 1993
-    doc.add_heading('4. สมการออกแบบ AASHTO 1993', level=1)
+    doc.add_heading('5. สมการออกแบบ AASHTO 1993', level=1)
     
     equation_text = """
     log₁₀(W₁₈) = ZR × So + 7.35 × log₁₀(D+1) - 0.06 
@@ -330,7 +353,7 @@ def create_word_report(
     doc.add_paragraph(equation_text)
     
     # ผลการเปรียบเทียบ
-    doc.add_heading('5. ผลการเปรียบเทียบความหนาต่างๆ', level=1)
+    doc.add_heading('6. ผลการเปรียบเทียบความหนาต่างๆ', level=1)
     
     table3 = doc.add_table(rows=1, cols=5)
     table3.style = 'Table Grid'
@@ -350,7 +373,7 @@ def create_word_report(
         row_cells[4].text = "ผ่าน ✓" if result['passed'] else "ไม่ผ่าน ✗"
     
     # สรุปผล
-    doc.add_heading('6. สรุปผลการออกแบบ', level=1)
+    doc.add_heading('7. สรุปผลการออกแบบ', level=1)
     
     passed, ratio = main_result
     status = "ผ่านเกณฑ์ ✓" if passed else "ไม่ผ่านเกณฑ์ ✗"
@@ -365,7 +388,7 @@ def create_word_report(
     doc.add_paragraph(summary)
     
     # หมายเหตุ
-    doc.add_heading('7. หมายเหตุ', level=1)
+    doc.add_heading('8. หมายเหตุ', level=1)
     notes = """
     - การคำนวณนี้ใช้หลักการตามคู่มือ AASHTO Guide for Design of Pavement Structures (1993)
     - สมการ: log₁₀(W₁₈) รวม term (D^0.75 - 1.132) ในตัวเศษ
@@ -869,6 +892,7 @@ def main():
             'reliability': reliability,
             'so': so,
             'k_eff': k_eff,
+            'ls': ls_value,
             'fc_cube': fc_cube,
             'sc': sc,
             'j': j_value,
@@ -892,7 +916,8 @@ def main():
                         calculated_values=calculated_dict,
                         comparison_results=comparison_results,
                         selected_d=d_selected,
-                        main_result=(passed_selected, ratio_selected)
+                        main_result=(passed_selected, ratio_selected),
+                        layers_data=layers_data
                     )
                     
                     if buffer:
