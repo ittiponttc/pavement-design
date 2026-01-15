@@ -39,10 +39,10 @@ ZR_TABLE = {
 # ค่า Load Transfer Coefficient (J) ตามประเภทถนนและการถ่ายแรง
 # อ้างอิง: AASHTO 1993 Guide, Table 2.6
 J_VALUES = {
-    "JPCP + Dowel + Tied Shoulder": 2.7,
-    "JPCP + Dowel Bar (AC Shoulder)": 3.2,
-    "JPCP ไม่มี Dowel Bar": 3.8,
-    "CRCP + Tied Shoulder": 2.3,
+    "JPCP/JRCP + Dowel + Tied P.C.C." 2.8,
+    "JPCP/JRCP + Dowel Bar (AC Shoulder)": 3.2,
+    "JPCP/JRCP ไม่มี Dowel Bar": 3.8,
+    "CRCP + Tied P.C.C.: 2.5,
     "CRCP (AC Shoulder)": 2.9
 }
 
@@ -392,10 +392,9 @@ def create_word_report(
     notes = """
     - การคำนวณนี้ใช้หลักการตามคู่มือ AASHTO Guide for Design of Pavement Structures (1993)
     - สมการ: log₁₀(W₁₈) รวม term (D^0.75 - 1.132) ในตัวเศษ
-    - ค่า J สำหรับ JPCP + Dowel + Tied Shoulder = 2.7, JPCP + Dowel (AC Shoulder) = 3.2
     - การแปลงกำลังคอนกรีต: f'c (cylinder) ≈ 0.8 × f'c (cube)
     - Ec = 57,000 × √f'c (psi) ตาม ACI 318
-    - Sc ≈ 10 × √f'c (psi)
+    - Sc ≈ 10 × √f'c (psi) ใช้ไม่เกิน 600 psi
     """
     doc.add_paragraph(notes)
     
@@ -436,7 +435,7 @@ def main():
             "ประเภทถนนคอนกรีต",
             options=list(J_VALUES.keys()),
             index=0,
-            help="JPCP = Jointed Plain Concrete Pavement, CRCP = Continuously Reinforced Concrete Pavement"
+            help="JPCP = Jointed Plain Concrete Pavement,JRCP = Jointed Reinforced Concrete Pavement, CRCP = Continuously Reinforced Concrete Pavement"
         )
         
         st.markdown("---")
@@ -725,11 +724,11 @@ def main():
         # ตารางอ้างอิงค่า J
         with st.expander("📊 ตารางค่า Load Transfer Coefficient (J)"):
             st.markdown("""
-            | ประเภทถนน | J (Tied Shoulder) | J (AC Shoulder) |
+            | ประเภทถนน | J (Tied P.C.C | J (AC Shoulder) |
             |-----------|-------------------|-----------------|
-            | JPCP + Dowel Bar | 2.7 | 3.2 |
-            | JPCP ไม่มี Dowel | 3.2 | 3.8-4.4 |
-            | CRCP | 2.3 | 2.9 |
+            | JPCP/JRCP + Dowel Bar | 2.5-3.1 | 3.2 |
+            | JPCP/JRCP ไม่มี Dowel | 3.6-4.2 | 3.8-4.4 |
+            | CRCP | 2.3-2.9 | 2.9-3.2 |
             
             **หมายเหตุ:** ค่า J ต่ำ = การถ่ายแรงดี = รองรับ ESAL ได้มากขึ้น
             """)
