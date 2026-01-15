@@ -409,9 +409,6 @@ def main():
             help="JPCP = Jointed Plain Concrete Pavement, CRCP = Continuously Reinforced Concrete Pavement"
         )
         
-        # กำหนดค่า J ตามประเภท
-        j_value = J_VALUES[pavement_type]
-        
         st.markdown("---")
         
         # 1. ESAL ที่ต้องการรองรับ
@@ -537,32 +534,52 @@ def main():
         # Modulus of Rupture
         st.markdown("**Modulus of Rupture (Sc)**")
         
-        use_auto_sc = st.checkbox(
-            "คำนวณ Sc อัตโนมัติจากกำลังคอนกรีต",
-            value=True,
-            help="ใช้สูตร Sc = 10 × √f'c (psi)"
-        )
+        # คำนวณค่า Sc อัตโนมัติ
+        sc_auto = estimate_modulus_of_rupture(fc_cylinder)
+        st.info(f"ค่าประมาณ: Sc = 10 × √({fc_cylinder * 14.223:.0f}) = **{sc_auto:.0f} psi**")
         
-        if use_auto_sc:
-            sc = estimate_modulus_of_rupture(fc_cylinder)
-            st.info(f"Sc = 10 × √({fc_cylinder * 14.223:.0f}) = **{sc:.0f} psi**")
-        else:
-            sc = st.number_input(
-                "Modulus of Rupture (Sc)",
-                min_value=400,
-                max_value=1000,
-                value=650,
-                step=10,
-                format="%d",
-                help="กำลังดัดของคอนกรีต (หน่วย: psi)"
-            )
+        # ให้ผู้ใช้ป้อนค่าที่ต้องการใช้
+        sc = st.number_input(
+            "ค่า Sc ที่ใช้ในการคำนวณ (psi)",
+            min_value=400,
+            max_value=1000,
+            value=int(round(sc_auto)),
+            step=10,
+            format="%d",
+            help="ค่าเริ่มต้นคำนวณจาก 10×√f'c สามารถแก้ไขได้ตามผลทดสอบจริง"
+        )
         
         st.markdown("---")
         
         # 6. Load Transfer และ Drainage
         st.subheader("6️⃣ Load Transfer และ Drainage")
         
-        st.info(f"Load Transfer Coefficient (J) = **{j_value}** (สำหรับ {pavement_type})")
+        # แสดงค่า J อัตโนมัติตามประเภทถนน
+        j_auto = J_VALUES[pavement_type]
+        st.info(f"ค่าแนะนำสำหรับ {pavement_type}: **J = {j_auto}**")
+        
+        # ตารางอ้างอิงค่า J
+        with st.expander("📊 ตารางค่า Load Transfer Coefficient (J)"):
+            st.markdown("""
+            | ประเภทถนน | J (Tied Shoulder) | J (AC Shoulder) |
+            |-----------|-------------------|-----------------|
+            | JPCP + Dowel Bar | 2.7 | 3.2 |
+            | JPCP ไม่มี Dowel | 3.2 | 3.8-4.4 |
+            | CRCP | 2.3 | 2.9 |
+            
+            **หมายเหตุ:** ค่า J ต่ำ = การถ่ายแรงดี = รองรับ ESAL ได้มากขึ้น
+            """)
+        
+        # ให้ผู้ใช้ป้อนค่าที่ต้องการใช้
+        j_value = st.number_input(
+            "ค่า J ที่ใช้ในการคำนวณ",
+            min_value=2.0,
+            max_value=4.5,
+            value=j_auto,
+            step=0.1,
+            format="%.1f",
+            help="ค่าเริ่มต้นตามประเภทถนนที่เลือก สามารถแก้ไขได้"
+        )
         
         cd = st.number_input(
             "Drainage Coefficient (Cd)",
