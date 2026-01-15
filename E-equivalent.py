@@ -155,14 +155,14 @@ if st.button("คำนวณโมดูลัสเทียบเท่า"):
     doc.add_heading("การคำนวณโมดูลัสเทียบเท่าของโครงสร้างทาง", level=1)
     doc.add_paragraph("วิธี Odemark (1974)\n")
 
-    doc.add_heading("ข้อมูลโครงสร้างทาง", level=2)
-    for l in layers:
-        doc.add_paragraph(
-            f"{l['ชั้น']} : {l['ชนิดวัสดุ']}, "
-            f"h = {l['ความหนา (ซม.)']:.2f} cm "
-            f"({l['ความหนา (นิ้ว)']:.2f} in), "
-            f"E = {l['E (MPa)']:.1f} MPa"
-        )
+   doc.add_heading("ข้อมูลโครงสร้างทาง", level=2)
+for l in layers:
+    doc.add_paragraph(
+        f"{l['ชั้น']} : {l['ชนิดวัสดุ']}, "
+        f"h = {l['ความหนา (ซม.)']:.2f} cm "
+        f"({l['ความหนา (นิ้ว)']:.2f} in), "
+        f"MR = {l['MR (MPa)']:.1f} MPa"
+    )
 
     doc.add_heading("วิธีการคำนวณ", level=2)
     doc.add_paragraph(
