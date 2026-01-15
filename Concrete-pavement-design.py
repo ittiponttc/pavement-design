@@ -138,7 +138,7 @@ def calculate_aashto_rigid_w18(
     สมการ AASHTO 1993:
     log10(W18) = ZR × So + 7.35 × log10(D+1) - 0.06 
                  + log10(ΔPSI/(4.5-1.5)) / (1 + 1.624×10^7 / (D+1)^8.46)
-                 + (4.22 - 0.32×Pt) × log10[Sc×Cd / (215.63×J×(D^0.75 - 18.42/(Ec/k)^0.25))]
+                 + (4.22 - 0.32×Pt) × log10[(Sc×Cd×(D^0.75-1.132)) / (215.63×J×(D^0.75 - 18.42/(Ec/k)^0.25))]
     
     Parameters:
         d_inch: ความหนาแผ่นพื้นคอนกรีต (นิ้ว)
@@ -169,17 +169,23 @@ def calculate_aashto_rigid_w18(
     term3 = numerator3 / denominator3
     
     # พจน์ที่ 4: กำลังของคอนกรีตและฐานราก
-    # (4.22 - 0.32×Pt) × log10[Sc×Cd / (215.63×J×(D^0.75 - 18.42/(Ec/k)^0.25))]
+    # (4.22 - 0.32×Pt) × log10[(Sc×Cd×(D^0.75-1.132)) / (215.63×J×(D^0.75 - 18.42/(Ec/k)^0.25))]
     
-    # คำนวณส่วนในวงเล็บ
+    # คำนวณ D^0.75
+    d_power = d_inch ** 0.75
+    
+    # คำนวณตัวเศษ: Sc × Cd × (D^0.75 - 1.132)
+    numerator4 = sc_psi * cd * (d_power - 1.132)
+    
+    # คำนวณตัวส่วน: 215.63 × J × (D^0.75 - 18.42/(Ec/k)^0.25)
     ec_k_ratio = ec_psi / k_pci
-    bracket_term = d_inch ** 0.75 - 18.42 / (ec_k_ratio ** 0.25)
+    denominator4 = 215.63 * j * (d_power - 18.42 / (ec_k_ratio ** 0.25))
     
-    # ตรวจสอบว่าค่าในวงเล็บต้องเป็นบวก
-    if bracket_term <= 0:
+    # ตรวจสอบว่าค่าต้องเป็นบวก
+    if numerator4 <= 0 or denominator4 <= 0:
         return (float('-inf'), 0)
     
-    inner_term = (sc_psi * cd) / (215.63 * j * bracket_term)
+    inner_term = numerator4 / denominator4
     
     if inner_term <= 0:
         return (float('-inf'), 0)
@@ -320,7 +326,7 @@ def create_word_report(
     equation_text = """
     log₁₀(W₁₈) = ZR × So + 7.35 × log₁₀(D+1) - 0.06 
                  + log₁₀(ΔPSI/(4.5-1.5)) / (1 + 1.624×10⁷/(D+1)^8.46)
-                 + (4.22 - 0.32×Pt) × log₁₀[Sc×Cd/(215.63×J×(D^0.75 - 18.42/(Ec/k)^0.25))]
+                 + (4.22 - 0.32×Pt) × log₁₀[(Sc×Cd×(D^0.75-1.132))/(215.63×J×(D^0.75 - 18.42/(Ec/k)^0.25))]
     """
     doc.add_paragraph(equation_text)
     
@@ -363,9 +369,11 @@ def create_word_report(
     doc.add_heading('7. หมายเหตุ', level=1)
     notes = """
     - การคำนวณนี้ใช้หลักการตามคู่มือ AASHTO Guide for Design of Pavement Structures (1993)
-    - ค่า J สำหรับ JPCP + Dowel Bar = 3.2, JPCP ไม่มี Dowel Bar = 3.8, CRCP = 2.9
+    - สมการ: log₁₀(W₁₈) รวม term (D^0.75 - 1.132) ในตัวเศษ
+    - ค่า J สำหรับ JPCP + Dowel + Tied Shoulder = 2.7, JPCP + Dowel (AC Shoulder) = 3.2
     - การแปลงกำลังคอนกรีต: f'c (cylinder) ≈ 0.8 × f'c (cube)
     - Ec = 57,000 × √f'c (psi) ตาม ACI 318
+    - Sc ≈ 10 × √f'c (psi)
     """
     doc.add_paragraph(notes)
     
@@ -745,7 +753,7 @@ def main():
         ''')
         
         st.latex(r'''
-        + (4.22 - 0.32 \times P_t) \times \log_{10}\left[\frac{S_c \times C_d}{215.63 \times J \times \left(D^{0.75} - \frac{18.42}{(E_c/k)^{0.25}}\right)}\right]
+        + (4.22 - 0.32 \times P_t) \times \log_{10}\left[\frac{S_c \times C_d \times (D^{0.75} - 1.132)}{215.63 \times J \times \left(D^{0.75} - \frac{18.42}{(E_c/k)^{0.25}}\right)}\right]
         ''')
         
         st.markdown("---")
