@@ -282,7 +282,7 @@ def create_word_report(
         ('Reliability', 'R', f"{inputs['reliability']:.0f}", '%'),
         ('Standard Deviation', 'So', f"{inputs['so']:.2f}", '-'),
         ('Modulus of Subgrade Reaction', 'k_eff', f"{inputs['k_eff']:,.0f}", 'pci'),
-        ('กำลังคอนกรีต', "f'c", f"{inputs['fc_cube']:.0f} (Cube) [{int(inputs['fc_cube']*0.8)} Cyl.]", 'ksc'),
+        ('กำลังคอนกรีต', "f'c", f"{inputs['fc_cube']:.0f} Cube ({int(inputs['fc_cube']*0.8)} Cyl.)", 'ksc'),
         ('Modulus of Rupture', 'Sc', f"{inputs['sc']:.0f}", 'psi'),
         ('Load Transfer Coefficient', 'J', f"{inputs['j']:.1f}", '-'),
         ('Drainage Coefficient', 'Cd', f"{inputs['cd']:.1f}", '-'),
@@ -307,7 +307,6 @@ def create_word_report(
     hdr_cells2[3].text = 'หน่วย'
     
     calc_data = [
-     
         ('Modulus of Elasticity', 'Ec', f"{calculated_values['ec']:,.0f}", 'psi'),
         ('Standard Normal Deviate', 'ZR', f"{calculated_values['zr']:.3f}", '-'),
         ('การสูญเสีย Serviceability', 'ΔPSI', f"{calculated_values['delta_psi']:.1f}", '-'),
@@ -419,6 +418,80 @@ def main():
         
         st.markdown("---")
         
+        # ชั้นโครงสร้างทาง (Pavement Layers)
+        st.subheader("🔶 ชั้นโครงสร้างทาง (Pavement Layers)")
+        
+        # จำนวนชั้นวัสดุ
+        num_layers = st.slider(
+            "จำนวนชั้นวัสดุใต้แผ่นคอนกรีต",
+            min_value=1,
+            max_value=6,
+            value=5,
+            help="เลือกจำนวนชั้นวัสดุ 1-6 ชั้น"
+        )
+        
+        # ค่า Default สำหรับแต่ละชั้น
+        default_layers = [
+            {"name": "Asphalt Treated Base", "thickness_cm": 5, "E_MPa": 2500},
+            {"name": "Cement Treated Base", "thickness_cm": 20, "E_MPa": 1200},
+            {"name": "Crusite Base", "thickness_cm": 15, "E_MPa": 150},
+            {"name": "Granular Subbase", "thickness_cm": 25, "E_MPa": 80},
+            {"name": "Selected Material", "thickness_cm": 30, "E_MPa": 50},
+            {"name": "Subgrade", "thickness_cm": 0, "E_MPa": 30},
+        ]
+        
+        # เก็บข้อมูลชั้นวัสดุ
+        layers_data = []
+        
+        with st.expander("📊 ตารางค่า Modulus แนะนำ", expanded=False):
+            st.markdown("""
+            | ประเภทวัสดุ | E (MPa) |
+            |------------|---------|
+            | Asphalt Treated Base | 1,500 - 3,000 |
+            | Cement Treated Base | 1,000 - 2,000 |
+            | Crushed Stone Base | 100 - 300 |
+            | Granular Subbase | 50 - 150 |
+            | Selected Material | 30 - 80 |
+            | Subgrade (ดินเดิม) | 20 - 50 |
+            """)
+        
+        for i in range(num_layers):
+            st.markdown(f"**ชั้นที่ {i+1}**")
+            col_a, col_b, col_c = st.columns([2, 1, 1])
+            
+            with col_a:
+                layer_name = st.text_input(
+                    f"ชื่อวัสดุ",
+                    value=default_layers[i]["name"] if i < len(default_layers) else f"Layer {i+1}",
+                    key=f"layer_name_{i}"
+                )
+            
+            with col_b:
+                layer_thickness = st.number_input(
+                    f"ความหนา (ซม.)",
+                    min_value=0,
+                    max_value=100,
+                    value=default_layers[i]["thickness_cm"] if i < len(default_layers) else 20,
+                    key=f"layer_thick_{i}"
+                )
+            
+            with col_c:
+                layer_modulus = st.number_input(
+                    f"E (MPa)",
+                    min_value=10,
+                    max_value=10000,
+                    value=default_layers[i]["E_MPa"] if i < len(default_layers) else 100,
+                    key=f"layer_E_{i}"
+                )
+            
+            layers_data.append({
+                "name": layer_name,
+                "thickness_cm": layer_thickness,
+                "E_MPa": layer_modulus
+            })
+        
+        st.markdown("---")
+        
         # 1. ESAL ที่ต้องการรองรับ
         st.subheader("1️⃣ ปริมาณจราจร")
         
@@ -514,6 +587,34 @@ def main():
             step=25,
             format="%d",
             help="ค่า k จากการทดสอบ Plate Bearing Test หรือประมาณจาก CBR (หน่วย: pci)"
+        )
+        
+        # Loss of Support (LS)
+        st.markdown("**Loss of Support (LS)**")
+        
+        with st.expander("📊 ตารางค่า Loss of Support แนะนำ (AASHTO 1993)"):
+            st.markdown("""
+            | ประเภทวัสดุ | Loss of Support (LS) |
+            |------------|---------------------|
+            | Cement Treated Granular Base | 0.0 - 1.0 |
+            | Cement Aggregate Mixtures | 0.0 - 1.0 |
+            | Asphalt Treated Base | 0.0 - 1.0 |
+            | Bituminous Stabilized Mixtures | 0.0 - 1.0 |
+            | Lime Stabilized | 1.0 - 3.0 |
+            | Unbound Granular Materials | 1.0 - 3.0 |
+            | Fine Grained or Natural Subgrade | 2.0 - 3.0 |
+            
+            **หมายเหตุ:** ค่า LS ใช้ปรับลดค่า k_eff เพื่อคำนึงถึงการสูญเสียการรองรับจากการกัดเซาะ
+            """)
+        
+        ls_value = st.number_input(
+            "ค่า Loss of Support (LS)",
+            min_value=0.0,
+            max_value=3.0,
+            value=1.0,
+            step=0.5,
+            format="%.1f",
+            help="ค่า LS สำหรับปรับลด k_eff (0.0-3.0)"
         )
         
         st.markdown("---")
