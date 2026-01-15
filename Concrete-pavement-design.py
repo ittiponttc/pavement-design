@@ -39,10 +39,10 @@ ZR_TABLE = {
 # ค่า Load Transfer Coefficient (J) ตามประเภทถนนและการถ่ายแรง
 # อ้างอิง: AASHTO 1993 Guide, Table 2.6
 J_VALUES = {
-    "JPCP + Dowel + Tied Shoulder": 2.7,
+    "JPCP + Dowel + Tied Shoulder": 2.8,
     "JPCP + Dowel Bar (AC Shoulder)": 3.2,
     "JPCP ไม่มี Dowel Bar": 3.8,
-    "CRCP + Tied Shoulder": 2.3,
+    "CRCP + Tied Shoulder": 2.5,
     "CRCP (AC Shoulder)": 2.9
 }
 
@@ -56,7 +56,7 @@ CD_DEFAULT = 1.0
 def convert_cube_to_cylinder(fc_cube_ksc: float) -> float:
     """
     แปลงกำลังอัดคอนกรีตจาก Cube เป็น Cylinder
-    fc_cylinder ≈ 0.8 × fc_cube (โดยประมาณ)
+    fc_cylinder ≈ 0.833 × fc_cube (โดยประมาณ)
     
     Parameters:
         fc_cube_ksc: กำลังอัดคอนกรีต Cube (ksc)
