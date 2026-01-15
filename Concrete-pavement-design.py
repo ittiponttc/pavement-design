@@ -282,7 +282,7 @@ def create_word_report(
         ('Reliability', 'R', f"{inputs['reliability']:.0f}", '%'),
         ('Standard Deviation', 'So', f"{inputs['so']:.2f}", '-'),
         ('Modulus of Subgrade Reaction', 'k_eff', f"{inputs['k_eff']:,.0f}", 'pci'),
-        ('กำลังคอนกรีต (Cube)', "f'c (cube)", f"{inputs['fc_cube']:.0f}", 'ksc'),
+        ('กำลังคอนกรีต', "f'c", f"{inputs['fc_cube']:.0f} (Cube) [{int(inputs['fc_cube']*0.8)} Cyl.]", 'ksc'),
         ('Modulus of Rupture', 'Sc', f"{inputs['sc']:.0f}", 'psi'),
         ('Load Transfer Coefficient', 'J', f"{inputs['j']:.1f}", '-'),
         ('Drainage Coefficient', 'Cd', f"{inputs['cd']:.1f}", '-'),
