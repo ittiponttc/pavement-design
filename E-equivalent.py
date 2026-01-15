@@ -163,7 +163,12 @@ if st.button("คำนวณโมดูลัสเทียบเท่า"):
             f"({l['ความหนา (นิ้ว)']:.2f} in), "
             f"MR = {l['MR (MPa)']:.1f} MPa"
         )
-
+doc.add_heading("วิธีการคำนวณ", level=2)
+doc.add_paragraph(
+    "E_eq = ( Σ(h·E^(1/3)) / Σh )^3"
+)
+doc.add_paragraph(f"Σh = {sum_h:.2f} cm")
+doc.add_paragraph(f"Σ(h·E^(1/3)) = {sum_h_E13:.2f}")
     doc.add_heading("ผลการคำนวณ", level=2)
     doc.add_paragraph(
         f"E_equivalent = {Eeq_psi:,.0f} psi ({Eeq_MPa:.1f} MPa)"
