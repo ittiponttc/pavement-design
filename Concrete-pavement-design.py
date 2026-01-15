@@ -56,7 +56,7 @@ CD_DEFAULT = 1.0
 def convert_cube_to_cylinder(fc_cube_ksc: float) -> float:
     """
     แปลงกำลังอัดคอนกรีตจาก Cube เป็น Cylinder
-    fc_cylinder ≈ 0.8 × fc_cube (โดยประมาณ)
+    fc_cylinder ≈ 0.833 × fc_cube (โดยประมาณ)
     
     Parameters:
         fc_cube_ksc: กำลังอัดคอนกรีต Cube (ksc)
@@ -64,7 +64,7 @@ def convert_cube_to_cylinder(fc_cube_ksc: float) -> float:
     Returns:
         กำลังอัดคอนกรีต Cylinder (ksc)
     """
-    return 0.8 * fc_cube_ksc
+    return 0.833 * fc_cube_ksc
 
 
 def calculate_concrete_modulus(fc_cylinder_ksc: float) -> float:
