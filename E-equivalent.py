@@ -77,7 +77,7 @@ for i in range(n_layers):
                 "ความหนา (ซม.)",
                 min_value=0.1,
                 value=10.0,
-                step=0.1,
+                step=1.0,
                 key=f"h_{i}"
             )
 
