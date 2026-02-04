@@ -47,7 +47,7 @@ except ImportError:
 
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(
-    page_title="โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.0",
+    page_title="โปรแกรมวิเคราะห์ LCCA ผิวทาง v1.0",
     page_icon="🛣️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -696,7 +696,7 @@ def main():
         
         ระยะวิเคราะห์ = st.slider(
             "ระยะเวลาวิเคราะห์ (ปี)",
-            min_value=20, max_value=50, value=35, step=5,
+            min_value=20, max_value=100, value=35, step=5,
             help="ระยะเวลาที่ใช้ในการวิเคราะห์เปรียบเทียบทางเลือก"
         )
         
