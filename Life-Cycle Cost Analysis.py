@@ -917,7 +917,7 @@ def main():
                 st.subheader("🔧 แผนบำรุงรักษา")
                 
                 # หัวข้อคอลัมน์
-                col_h1, col_h2, col_h3, col_h4 = st.columns([3, 2, 1, 1])
+                col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([3, 2, 1, 1, 0.5])
                 with col_h1:
                     st.markdown("**กิจกรรม**")
                 with col_h2:
@@ -926,9 +926,12 @@ def main():
                     st.markdown("**ปีเริ่มต้น**")
                 with col_h4:
                     st.markdown("**ทุกๆ (ปี)**")
+                with col_h5:
+                    st.markdown("**ลบ**")
                 
+                รายการที่จะลบ_maint = []
                 for j, บำรุง in enumerate(ทางเลือก.แผนบำรุงรักษา):
-                    col_m1, col_m2, col_m3, col_m4 = st.columns([3, 2, 1, 1])
+                    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns([3, 2, 1, 1, 0.5])
                     
                     with col_m1:
                         บำรุง.ชื่อกิจกรรม = st.text_input(
@@ -967,6 +970,23 @@ def main():
                             key=f"maint_freq_{i}_{j}",
                             label_visibility="collapsed"
                         )
+                    
+                    with col_m5:
+                        if st.button("🗑️", key=f"del_maint_{i}_{j}", help="ลบรายการนี้"):
+                            รายการที่จะลบ_maint.append(j)
+                
+                # ลบรายการที่เลือก
+                for idx in sorted(รายการที่จะลบ_maint, reverse=True):
+                    if len(ทางเลือก.แผนบำรุงรักษา) > 1:
+                        ทางเลือก.แผนบำรุงรักษา.pop(idx)
+                        st.rerun()
+                
+                # ปุ่มเพิ่มรายการบำรุงรักษา
+                if st.button(f"➕ เพิ่มกิจกรรมบำรุงรักษา", key=f"add_maint_{i}"):
+                    ทางเลือก.แผนบำรุงรักษา.append(
+                        กิจกรรมบำรุงรักษา("กิจกรรมใหม่", 50.0, ปีเริ่มต้น=5, ความถี่=5)
+                    )
+                    st.rerun()
                 
                 st.markdown("---")
                 
@@ -974,16 +994,20 @@ def main():
                 st.subheader("🏗️ แผนฟื้นฟูสภาพ")
                 
                 # หัวข้อคอลัมน์
-                col_rh1, col_rh2, col_rh3 = st.columns([4, 2, 1])
+                col_rh1, col_rh2, col_rh3, col_rh4 = st.columns([4, 2, 1, 0.5])
                 with col_rh1:
                     st.markdown("**กิจกรรม**")
                 with col_rh2:
                     st.markdown("**ต้นทุน (บาท/ตร.ม.)**")
                 with col_rh3:
                     st.markdown("**ปีที่ดำเนินการ**")
+                with col_rh4:
+                    st.markdown("**ลบ**")
                 
+                # แสดงรายการฟื้นฟูสภาพ
+                รายการที่จะลบ_rehab = []
                 for k, ฟื้นฟู in enumerate(ทางเลือก.แผนฟื้นฟูสภาพ):
-                    col_r1, col_r2, col_r3 = st.columns([4, 2, 1])
+                    col_r1, col_r2, col_r3, col_r4 = st.columns([4, 2, 1, 0.5])
                     
                     with col_r1:
                         ฟื้นฟู.ชื่อกิจกรรม = st.text_input(
@@ -1012,6 +1036,25 @@ def main():
                             key=f"rehab_year_{i}_{k}",
                             label_visibility="collapsed"
                         )
+                    
+                    with col_r4:
+                        if st.button("🗑️", key=f"del_rehab_{i}_{k}", help="ลบรายการนี้"):
+                            รายการที่จะลบ_rehab.append(k)
+                
+                # ลบรายการที่เลือก
+                for idx in sorted(รายการที่จะลบ_rehab, reverse=True):
+                    if len(ทางเลือก.แผนฟื้นฟูสภาพ) > 1:
+                        ทางเลือก.แผนฟื้นฟูสภาพ.pop(idx)
+                        st.rerun()
+                
+                # ปุ่มเพิ่มรายการฟื้นฟูสภาพ
+                if st.button(f"➕ เพิ่มกิจกรรมฟื้นฟูสภาพ", key=f"add_rehab_{i}"):
+                    # หาปีถัดไปที่เหมาะสม
+                    ปีล่าสุด = max([ฟ.ปีดำเนินการ for ฟ in ทางเลือก.แผนฟื้นฟูสภาพ]) if ทางเลือก.แผนฟื้นฟูสภาพ else 10
+                    ทางเลือก.แผนฟื้นฟูสภาพ.append(
+                        กิจกรรมฟื้นฟูสภาพ("Overlay AC 50 มม.", 450.0, ปีดำเนินการ=ปีล่าสุด + 9)
+                    )
+                    st.rerun()
         
         st.divider()
         
