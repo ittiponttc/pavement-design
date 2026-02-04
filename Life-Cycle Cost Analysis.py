@@ -32,6 +32,19 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 import json
 import io
+from datetime import datetime
+
+# สำหรับส่งออก Word
+try:
+    from docx import Document as WordDocument
+    from docx.shared import Inches, Pt, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
 
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(
@@ -72,6 +85,7 @@ class ทางเลือกผิวทาง:
     แผนฟื้นฟูสภาพ: List[กิจกรรมฟื้นฟูสภาพ]
     ร้อยละมูลค่าซาก: float = 20.0
     พื้นที่: float = 1000.0  # ตร.ม.
+    ความหนา: float = 0.0  # ซม. (0 = ไม่ระบุ)
     เปิดใช้งาน: bool = True
 
 
@@ -262,6 +276,7 @@ def วิเคราะห์_LCCA(
         สรุป_รายการ.append({
             'ทางเลือก': ทางเลือก.ชื่อ,
             'ประเภทผิวทาง': ทางเลือก.ประเภท,
+            'ความหนา_ซม': ทางเลือก.ความหนา,
             'พื้นที่_ตรม': ทางเลือก.พื้นที่,
             'ต้นทุนก่อสร้าง_ตรม': ทางเลือก.ต้นทุนก่อสร้าง,
             'PW_ก่อสร้าง': ก่อสร้าง,
@@ -341,12 +356,13 @@ def สร้างทางเลือกเริ่มต้น() -> List[�
         ],
         ร้อยละมูลค่าซาก=20.0,
         พื้นที่=10000.0,
+        ความหนา=15.0,
         เปิดใช้งาน=True
     )
     
     # 2. JPCP - Jointed Plain Concrete Pavement (คอนกรีตไม่เสริมเหล็ก)
     jpcp = ทางเลือกผิวทาง(
-        ชื่อ="JPCP (30 ซม.)",
+        ชื่อ="JPCP",
         ประเภท="JPCP",
         ต้นทุนก่อสร้าง=2800.0,
         แผนบำรุงรักษา=[
@@ -360,14 +376,15 @@ def สร้างทางเลือกเริ่มต้น() -> List[�
         ],
         ร้อยละมูลค่าซาก=30.0,
         พื้นที่=10000.0,
+        ความหนา=30.0,
         เปิดใช้งาน=True
     )
     
     # 3. JRCP - Jointed Reinforced Concrete Pavement (คอนกรีตเสริมเหล็ก)
     jrcp = ทางเลือกผิวทาง(
-        ชื่อ="JRCP (25 ซม.)",
+        ชื่อ="JRCP",
         ประเภท="JRCP",
-        ต้นทุนก่อสร้าง=3000.0,  # สูงกว่า JPCP เพราะมีเหล็กเสริม
+        ต้นทุนก่อสร้าง=3000.0,
         แผนบำรุงรักษา=[
             กิจกรรมบำรุงรักษา("อุดรอยต่อ", 35.0, ปีเริ่มต้น=6, ความถี่=6),
             กิจกรรมบำรุงรักษา("ซ่อมบางส่วน", 35.0, ปีเริ่มต้น=12, ความถี่=12),
@@ -379,12 +396,13 @@ def สร้างทางเลือกเริ่มต้น() -> List[�
         ],
         ร้อยละมูลค่าซาก=32.0,
         พื้นที่=10000.0,
+        ความหนา=25.0,
         เปิดใช้งาน=True
     )
     
     # 4. CRCP - Continuously Reinforced Concrete Pavement
     crcp = ทางเลือกผิวทาง(
-        ชื่อ="CRCP (25 ซม.)",
+        ชื่อ="CRCP",
         ประเภท="CRCP",
         ต้นทุนก่อสร้าง=3500.0,
         แผนบำรุงรักษา=[
@@ -397,6 +415,7 @@ def สร้างทางเลือกเริ่มต้น() -> List[�
         ],
         ร้อยละมูลค่าซาก=35.0,
         พื้นที่=10000.0,
+        ความหนา=25.0,
         เปิดใช้งาน=True
     )
     
@@ -415,6 +434,7 @@ def ทางเลือก_เป็น_dict(ทางเลือก: ทา�
         'ต้นทุนก่อสร้าง': ทางเลือก.ต้นทุนก่อสร้าง,
         'ร้อยละมูลค่าซาก': ทางเลือก.ร้อยละมูลค่าซาก,
         'พื้นที่': ทางเลือก.พื้นที่,
+        'ความหนา': ทางเลือก.ความหนา,
         'เปิดใช้งาน': ทางเลือก.เปิดใช้งาน,
         'แผนบำรุงรักษา': [
             {
@@ -465,12 +485,186 @@ def dict_เป็น_ทางเลือก(data: dict) -> ทางเลื
         แผนฟื้นฟูสภาพ=แผนฟื้นฟู,
         ร้อยละมูลค่าซาก=data.get('ร้อยละมูลค่าซาก', 20.0),
         พื้นที่=data.get('พื้นที่', 10000.0),
+        ความหนา=data.get('ความหนา', 0.0),
         เปิดใช้งาน=data.get('เปิดใช้งาน', True)
     )
 
 
 # =============================================================================
-# ส่วนที่ 8: Streamlit Application
+# ส่วนที่ 8: ฟังก์ชันส่งออก Word
+# =============================================================================
+
+def สร้างรายงาน_Word(
+    สรุป: pd.DataFrame,
+    กระแสเงินสด: Dict[str, pd.DataFrame],
+    ระยะวิเคราะห์: int,
+    อัตราคิดลด: float,
+    ทางเลือกทั้งหมด: List[ทางเลือกผิวทาง]
+) -> io.BytesIO:
+    """สร้างรายงาน LCCA ในรูปแบบ Word"""
+    
+    doc = WordDocument()
+    
+    # ตั้งค่าฟอนต์เริ่มต้น
+    style = doc.styles['Normal']
+    style.font.name = 'TH Sarabun New'
+    style.font.size = Pt(14)
+    
+    # หัวข้อรายงาน
+    title = doc.add_heading('รายงานการวิเคราะห์ต้นทุนตลอดอายุการใช้งานผิวทาง (LCCA)', level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # ข้อมูลทั่วไป
+    doc.add_heading('1. ข้อมูลทั่วไป', level=1)
+    doc.add_paragraph(f'วันที่วิเคราะห์: {datetime.now().strftime("%d/%m/%Y %H:%M")}')
+    doc.add_paragraph(f'ระยะเวลาวิเคราะห์: {ระยะวิเคราะห์} ปี')
+    doc.add_paragraph(f'อัตราคิดลด: {อัตราคิดลด*100:.1f}%')
+    doc.add_paragraph(f'จำนวนทางเลือก: {len(สรุป)} ทางเลือก')
+    
+    # ตารางทางเลือกที่วิเคราะห์
+    doc.add_heading('2. ทางเลือกผิวทางที่วิเคราะห์', level=1)
+    
+    # สร้างตารางข้อมูลทางเลือก
+    table1 = doc.add_table(rows=1, cols=5)
+    table1.style = 'Table Grid'
+    table1.alignment = WD_TABLE_ALIGNMENT.CENTER
+    
+    # หัวตาราง
+    hdr_cells = table1.rows[0].cells
+    headers1 = ['ทางเลือก', 'ประเภท', 'ความหนา (ซม.)', 'พื้นที่ (ตร.ม.)', 'ต้นทุนก่อสร้าง (บาท/ตร.ม.)']
+    for i, header in enumerate(headers1):
+        hdr_cells[i].text = header
+        hdr_cells[i].paragraphs[0].runs[0].bold = True
+    
+    # ข้อมูลทางเลือก
+    for _, row in สรุป.iterrows():
+        row_cells = table1.add_row().cells
+        row_cells[0].text = str(row['ทางเลือก'])
+        row_cells[1].text = str(row['ประเภทผิวทาง'])
+        row_cells[2].text = f"{row['ความหนา_ซม']:.1f}"
+        row_cells[3].text = f"{row['พื้นที่_ตรม']:,.0f}"
+        row_cells[4].text = f"{row['ต้นทุนก่อสร้าง_ตรม']:,.0f}"
+    
+    doc.add_paragraph()
+    
+    # ผลการวิเคราะห์
+    doc.add_heading('3. ผลการวิเคราะห์ LCCA', level=1)
+    
+    # ตารางผลการวิเคราะห์
+    table2 = doc.add_table(rows=1, cols=5)
+    table2.style = 'Table Grid'
+    table2.alignment = WD_TABLE_ALIGNMENT.CENTER
+    
+    hdr_cells2 = table2.rows[0].cells
+    headers2 = ['ลำดับ', 'ทางเลือก', 'มูลค่าปัจจุบันรวม (บาท)', 'EAC (บาท/ปี)', 'ต้นทุน (บาท/ตร.ม./ปี)']
+    for i, header in enumerate(headers2):
+        hdr_cells2[i].text = header
+        hdr_cells2[i].paragraphs[0].runs[0].bold = True
+    
+    for _, row in สรุป.iterrows():
+        row_cells = table2.add_row().cells
+        row_cells[0].text = str(int(row['ลำดับ']))
+        row_cells[1].text = str(row['ทางเลือก'])
+        row_cells[2].text = f"{row['มูลค่าปัจจุบันรวม']:,.0f}"
+        row_cells[3].text = f"{row['ต้นทุนเฉลี่ยรายปี']:,.0f}"
+        row_cells[4].text = f"{row['ต้นทุนต่อตรม_ต่อปี']:,.2f}"
+    
+    doc.add_paragraph()
+    
+    # องค์ประกอบต้นทุน
+    doc.add_heading('4. องค์ประกอบต้นทุน (มูลค่าปัจจุบัน)', level=1)
+    
+    table3 = doc.add_table(rows=1, cols=6)
+    table3.style = 'Table Grid'
+    table3.alignment = WD_TABLE_ALIGNMENT.CENTER
+    
+    hdr_cells3 = table3.rows[0].cells
+    headers3 = ['ทางเลือก', 'ก่อสร้าง (บาท)', 'บำรุงรักษา (บาท)', 'ฟื้นฟูสภาพ (บาท)', 'มูลค่าซาก (บาท)', 'รวม (บาท)']
+    for i, header in enumerate(headers3):
+        hdr_cells3[i].text = header
+        hdr_cells3[i].paragraphs[0].runs[0].bold = True
+    
+    for _, row in สรุป.iterrows():
+        row_cells = table3.add_row().cells
+        row_cells[0].text = str(row['ทางเลือก'])
+        row_cells[1].text = f"{row['PW_ก่อสร้าง']:,.0f}"
+        row_cells[2].text = f"{row['PW_บำรุงรักษา']:,.0f}"
+        row_cells[3].text = f"{row['PW_ฟื้นฟูสภาพ']:,.0f}"
+        row_cells[4].text = f"{row['PW_มูลค่าซาก']:,.0f}"
+        row_cells[5].text = f"{row['มูลค่าปัจจุบันรวม']:,.0f}"
+    
+    doc.add_paragraph()
+    
+    # สรุปผล
+    doc.add_heading('5. สรุปผลการวิเคราะห์', level=1)
+    
+    ผู้ชนะ = สรุป.iloc[0]
+    doc.add_paragraph(f'ทางเลือกที่ประหยัดที่สุด: {ผู้ชนะ["ทางเลือก"]}')
+    doc.add_paragraph(f'มูลค่าปัจจุบันรวม: {ผู้ชนะ["มูลค่าปัจจุบันรวม"]:,.0f} บาท')
+    doc.add_paragraph(f'ต้นทุนเฉลี่ยรายปี (EAC): {ผู้ชนะ["ต้นทุนเฉลี่ยรายปี"]:,.0f} บาท/ปี')
+    
+    if len(สรุป) > 1:
+        doc.add_paragraph()
+        doc.add_paragraph('การเปรียบเทียบกับทางเลือกอื่น:')
+        for idx in range(1, len(สรุป)):
+            อื่น = สรุป.iloc[idx]
+            ส่วนต่าง = อื่น['มูลค่าปัจจุบันรวม'] - ผู้ชนะ['มูลค่าปัจจุบันรวม']
+            ร้อยละ = (ส่วนต่าง / อื่น['มูลค่าปัจจุบันรวม']) * 100
+            doc.add_paragraph(f'  - vs {อื่น["ทางเลือก"]}: ประหยัด {ส่วนต่าง:,.0f} บาท ({ร้อยละ:.1f}%)')
+    
+    # กระแสเงินสดรายละเอียด
+    doc.add_page_break()
+    doc.add_heading('6. รายละเอียดกระแสเงินสดแต่ละทางเลือก', level=1)
+    
+    for ชื่อทางเลือก, cf_table in กระแสเงินสด.items():
+        doc.add_heading(f'6.{list(กระแสเงินสด.keys()).index(ชื่อทางเลือก)+1} {ชื่อทางเลือก}', level=2)
+        
+        # สร้างตารางกระแสเงินสด
+        table_cf = doc.add_table(rows=1, cols=5)
+        table_cf.style = 'Table Grid'
+        
+        hdr_cf = table_cf.rows[0].cells
+        headers_cf = ['ปี', 'กิจกรรม', 'ต้นทุนตามปี (บาท)', 'ตัวคูณ PW', 'มูลค่าปัจจุบัน (บาท)']
+        for i, header in enumerate(headers_cf):
+            hdr_cf[i].text = header
+            hdr_cf[i].paragraphs[0].runs[0].bold = True
+        
+        for _, row in cf_table.iterrows():
+            row_cells = table_cf.add_row().cells
+            row_cells[0].text = str(int(row['ปี']))
+            row_cells[1].text = str(row['กิจกรรม'])
+            row_cells[2].text = f"{row['ต้นทุนตามปี']:,.0f}"
+            row_cells[3].text = f"{row['ตัวคูณ_PW']:.4f}"
+            row_cells[4].text = f"{row['มูลค่าปัจจุบัน']:,.0f}"
+        
+        # รวม
+        row_total = table_cf.add_row().cells
+        row_total[0].text = ''
+        row_total[1].text = 'รวม'
+        row_total[1].paragraphs[0].runs[0].bold = True
+        row_total[2].text = f"{cf_table['ต้นทุนตามปี'].sum():,.0f}"
+        row_total[3].text = ''
+        row_total[4].text = f"{cf_table['มูลค่าปัจจุบัน'].sum():,.0f}"
+        row_total[4].paragraphs[0].runs[0].bold = True
+        
+        doc.add_paragraph()
+    
+    # Footer
+    doc.add_paragraph()
+    doc.add_paragraph('─' * 50)
+    doc.add_paragraph('รายงานนี้สร้างโดย: โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.0')
+    doc.add_paragraph('ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ')
+    
+    # บันทึกเป็น BytesIO
+    file_stream = io.BytesIO()
+    doc.save(file_stream)
+    file_stream.seek(0)
+    
+    return file_stream
+
+
+# =============================================================================
+# ส่วนที่ 9: Streamlit Application
 # =============================================================================
 
 def main():
@@ -569,7 +763,7 @@ def main():
     # แท็บหลัก
     # ==========================================================================
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📝 แก้ไขข้อมูล",
+        "📝 ข้อมูลทางเลือก",
         "📊 ผลการวิเคราะห์",
         "💰 กระแสเงินสด",
         "📈 วิเคราะห์ความไว",
@@ -580,13 +774,13 @@ def main():
     # แท็บ 1: แก้ไขข้อมูลทางเลือก
     # ==========================================================================
     with tab1:
-        st.header("📝 แก้ไขข้อมูลทางเลือกผิวทาง")
+        st.header("📝 ข้อมูลทางเลือกผิวทาง")
         
         st.info("""
         💡 **คำแนะนำ:** 
-        - แก้ไขต้นทุนก่อสร้างและพื้นที่ได้ในแต่ละทางเลือก
+        - กำหนดต้นทุนก่อสร้าง ความหนา และพื้นที่ได้ในแต่ละทางเลือก
         - เปิด/ปิดทางเลือกที่ต้องการเปรียบเทียบ
-        - แก้ไขแผนบำรุงรักษาและฟื้นฟูสภาพได้
+        - กำหนดแผนบำรุงรักษาและฟื้นฟูสภาพได้
         """)
         
         # แสดงข้อมูลแต่ละทางเลือก
@@ -607,7 +801,7 @@ def main():
                 
                 # ข้อมูลหลัก
                 st.subheader("🏗️ ข้อมูลหลัก")
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3 = st.columns(3)
                 
                 with col1:
                     ชื่อใหม่ = st.text_input(
@@ -627,6 +821,19 @@ def main():
                     ทางเลือก.ประเภท = ประเภทใหม่
                 
                 with col3:
+                    ความหนาใหม่ = st.number_input(
+                        "ความหนา (ซม.)",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=float(ทางเลือก.ความหนา),
+                        step=1.0,
+                        key=f"thickness_{i}"
+                    )
+                    ทางเลือก.ความหนา = ความหนาใหม่
+                
+                col4, col5, col6 = st.columns(3)
+                
+                with col4:
                     ต้นทุนใหม่ = st.number_input(
                         "ต้นทุนก่อสร้าง (บาท/ตร.ม.)",
                         min_value=0.0,
@@ -637,7 +844,7 @@ def main():
                     )
                     ทางเลือก.ต้นทุนก่อสร้าง = ต้นทุนใหม่
                 
-                with col4:
+                with col5:
                     พื้นที่ใหม่ = st.number_input(
                         "พื้นที่ (ตร.ม.)",
                         min_value=100.0,
@@ -648,8 +855,7 @@ def main():
                     )
                     ทางเลือก.พื้นที่ = พื้นที่ใหม่
                 
-                col5, col6 = st.columns(2)
-                with col5:
+                with col6:
                     ซากใหม่ = st.number_input(
                         "ร้อยละมูลค่าซาก (%)",
                         min_value=0.0,
@@ -660,11 +866,11 @@ def main():
                     )
                     ทางเลือก.ร้อยละมูลค่าซาก = ซากใหม่
                 
-                with col6:
-                    st.metric(
-                        "ต้นทุนก่อสร้างรวม",
-                        f"{ทางเลือก.ต้นทุนก่อสร้าง * ทางเลือก.พื้นที่:,.0f} บาท"
-                    )
+                # แสดงต้นทุนก่อสร้างรวม
+                st.metric(
+                    "💰 ต้นทุนก่อสร้างรวม",
+                    f"{ทางเลือก.ต้นทุนก่อสร้าง * ทางเลือก.พื้นที่:,.0f} บาท"
+                )
                 
                 st.markdown("---")
                 
@@ -818,10 +1024,10 @@ def main():
             st.subheader("🏆 ตารางเปรียบเทียบ")
             
             # จัดรูปแบบตาราง
-            สรุป_display = สรุป[['ลำดับ', 'ทางเลือก', 'ประเภทผิวทาง', 'พื้นที่_ตรม', 
+            สรุป_display = สรุป[['ลำดับ', 'ทางเลือก', 'ประเภทผิวทาง', 'ความหนา_ซม', 'พื้นที่_ตรม', 
                                 'ต้นทุนก่อสร้าง_ตรม', 'มูลค่าปัจจุบันรวม', 
                                 'ต้นทุนเฉลี่ยรายปี', 'ต้นทุนต่อตรม_ต่อปี']].copy()
-            สรุป_display.columns = ['ลำดับ', 'ทางเลือก', 'ประเภท', 'พื้นที่ (ตร.ม.)',
+            สรุป_display.columns = ['ลำดับ', 'ทางเลือก', 'ประเภท', 'ความหนา (ซม.)', 'พื้นที่ (ตร.ม.)',
                                    'ก่อสร้าง (บาท/ตร.ม.)', 'มูลค่าปัจจุบัน (บาท)', 
                                    'EAC (บาท/ปี)', 'ต้นทุน (บาท/ตร.ม./ปี)']
             
@@ -832,6 +1038,7 @@ def main():
             
             st.dataframe(
                 สรุป_display.style.apply(highlight_best, axis=1).format({
+                    'ความหนา (ซม.)': '{:,.1f}',
                     'พื้นที่ (ตร.ม.)': '{:,.0f}',
                     'ก่อสร้าง (บาท/ตร.ม.)': '{:,.0f}',
                     'มูลค่าปัจจุบัน (บาท)': '{:,.0f}',
@@ -911,6 +1118,38 @@ def main():
                     )
                     fig_pie.update_layout(height=350)
                     st.plotly_chart(fig_pie, use_container_width=True)
+            
+            # ปุ่มส่งออกรายงาน
+            st.divider()
+            st.subheader("📄 ส่งออกรายงาน")
+            
+            col_export1, col_export2 = st.columns(2)
+            
+            with col_export1:
+                if DOCX_AVAILABLE:
+                    word_file = สร้างรายงาน_Word(
+                        สรุป, กระแสเงินสด, ระยะวิเคราะห์, อัตราคิดลด,
+                        st.session_state.ทางเลือกทั้งหมด
+                    )
+                    st.download_button(
+                        label="📝 ดาวน์โหลดรายงาน Word",
+                        data=word_file,
+                        file_name=f"LCCA_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+                else:
+                    st.warning("⚠️ ต้องติดตั้ง python-docx: `pip install python-docx`")
+            
+            with col_export2:
+                csv_summary = สรุป.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="📊 ดาวน์โหลดสรุป CSV",
+                    data=csv_summary,
+                    file_name=f"LCCA_Summary_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
     
     # ==========================================================================
     # แท็บ 3: กระแสเงินสด
