@@ -671,6 +671,17 @@ def main():
                 # แผนบำรุงรักษา
                 st.subheader("🔧 แผนบำรุงรักษา")
                 
+                # หัวข้อคอลัมน์
+                col_h1, col_h2, col_h3, col_h4 = st.columns([3, 2, 1, 1])
+                with col_h1:
+                    st.markdown("**กิจกรรม**")
+                with col_h2:
+                    st.markdown("**ต้นทุน (บาท/ตร.ม.)**")
+                with col_h3:
+                    st.markdown("**ปีเริ่มต้น**")
+                with col_h4:
+                    st.markdown("**ทุกๆ (ปี)**")
+                
                 for j, บำรุง in enumerate(ทางเลือก.แผนบำรุงรักษา):
                     col_m1, col_m2, col_m3, col_m4 = st.columns([3, 2, 1, 1])
                     
@@ -716,6 +727,15 @@ def main():
                 
                 # แผนฟื้นฟูสภาพ
                 st.subheader("🏗️ แผนฟื้นฟูสภาพ")
+                
+                # หัวข้อคอลัมน์
+                col_rh1, col_rh2, col_rh3 = st.columns([4, 2, 1])
+                with col_rh1:
+                    st.markdown("**กิจกรรม**")
+                with col_rh2:
+                    st.markdown("**ต้นทุน (บาท/ตร.ม.)**")
+                with col_rh3:
+                    st.markdown("**ปีที่ดำเนินการ**")
                 
                 for k, ฟื้นฟู in enumerate(ทางเลือก.แผนฟื้นฟูสภาพ):
                     col_r1, col_r2, col_r3 = st.columns([4, 2, 1])
