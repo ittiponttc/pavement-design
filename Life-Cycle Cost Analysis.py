@@ -525,7 +525,8 @@ def สร้างรายงาน_Word(
     กระแสเงินสด: Dict[str, pd.DataFrame],
     ระยะวิเคราะห์: int,
     อัตราคิดลด: float,
-    ทางเลือกทั้งหมด: List[ทางเลือกผิวทาง]
+    ทางเลือกทั้งหมด: List[ทางเลือกผิวทาง],
+    ชื่อโครงการ: str = "โครงการก่อสร้างทางหลวง"
 ) -> io.BytesIO:
     """สร้างรายงาน LCCA ในรูปแบบ Word"""
     
@@ -540,8 +541,15 @@ def สร้างรายงาน_Word(
     title = doc.add_heading('รายงานการวิเคราะห์ต้นทุนตลอดอายุการใช้งานผิวทาง (LCCA)', level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
+    # ชื่อโครงการ
+    project_title = doc.add_heading(ชื่อโครงการ, level=1)
+    project_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_paragraph()
+    
     # ข้อมูลทั่วไป
     doc.add_heading('1. ข้อมูลทั่วไป', level=1)
+    doc.add_paragraph(f'ชื่อโครงการ: {ชื่อโครงการ}')
     doc.add_paragraph(f'วันที่วิเคราะห์: {datetime.now().strftime("%d/%m/%Y %H:%M")}')
     doc.add_paragraph(f'ระยะเวลาวิเคราะห์: {ระยะวิเคราะห์} ปี')
     doc.add_paragraph(f'อัตราคิดลด: {อัตราคิดลด*100:.1f}%')
@@ -678,6 +686,7 @@ def สร้างรายงาน_Word(
     # Footer
     doc.add_paragraph()
     doc.add_paragraph('─' * 50)
+    doc.add_paragraph(f'โครงการ: {ชื่อโครงการ}')
     doc.add_paragraph('รายงานนี้สร้างโดย: โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.0')
     doc.add_paragraph('ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ')
     
@@ -704,7 +713,7 @@ def main():
     พัฒนาสำหรับการเรียนการสอนและงานวิจัยด้านวิศวกรรมทาง  
     ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ
     
-    ✨ **คุณสมบัติใหม่:** แก้ไขต้นทุนและพื้นที่ได้เอง, เพิ่มผิวทาง JRCP
+    ✨ **คุณสมบัติใหม่:** แก้ไขต้นทุนและพื้นที่ได้เอง, เพิ่มผิวทาง JRCP, ระบุชื่อโครงการได้
     """)
     
     st.divider()
@@ -720,6 +729,20 @@ def main():
     # ==========================================================================
     with st.sidebar:
         st.header("⚙️ พารามิเตอร์การวิเคราะห์")
+        
+        # ชื่อโครงการ
+        if 'ชื่อโครงการ' not in st.session_state:
+            st.session_state.ชื่อโครงการ = "โครงการก่อสร้างทางหลวง"
+        
+        ชื่อโครงการ = st.text_input(
+            "🏗️ ชื่อโครงการ",
+            value=st.session_state.ชื่อโครงการ,
+            help="ระบุชื่อโครงการสำหรับแสดงในรายงาน",
+            key="project_name_input"
+        )
+        st.session_state.ชื่อโครงการ = ชื่อโครงการ
+        
+        st.divider()
         
         ระยะวิเคราะห์ = st.slider(
             "ระยะเวลาวิเคราะห์ (ปี)",
@@ -774,6 +797,8 @@ def main():
             try:
                 data = json.load(uploaded_file)
                 st.session_state.ทางเลือกทั้งหมด = [dict_เป็น_ทางเลือก(d) for d in data['ทางเลือก']]
+                if 'ชื่อโครงการ' in data:
+                    st.session_state.ชื่อโครงการ = data['ชื่อโครงการ']
                 st.success(f"✅ โหลดข้อมูลสำเร็จ!")
                 st.rerun()
             except Exception as e:
@@ -1064,6 +1089,7 @@ def main():
         with col_save1:
             if st.button("💾 สร้างไฟล์ JSON", use_container_width=True):
                 data_export = {
+                    'ชื่อโครงการ': st.session_state.ชื่อโครงการ,
                     'ระยะวิเคราะห์': ระยะวิเคราะห์,
                     'อัตราคิดลด': อัตราคิดลด,
                     'ทางเลือก': [ทางเลือก_เป็น_dict(ท) for ท in st.session_state.ทางเลือกทั้งหมด]
@@ -1086,6 +1112,9 @@ def main():
     # ==========================================================================
     with tab2:
         st.header("📊 ผลการวิเคราะห์ LCCA")
+        
+        # แสดงชื่อโครงการ
+        st.subheader(f"📋 โครงการ: {st.session_state.ชื่อโครงการ}")
         
         # แสดงพารามิเตอร์
         col1, col2, col3 = st.columns(3)
@@ -1211,12 +1240,13 @@ def main():
                 if DOCX_AVAILABLE:
                     word_file = สร้างรายงาน_Word(
                         สรุป, กระแสเงินสด, ระยะวิเคราะห์, อัตราคิดลด,
-                        st.session_state.ทางเลือกทั้งหมด
+                        st.session_state.ทางเลือกทั้งหมด,
+                        st.session_state.ชื่อโครงการ
                     )
                     st.download_button(
                         label="📝 ดาวน์โหลดรายงาน Word",
                         data=word_file,
-                        file_name=f"LCCA_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+                        file_name=f"LCCA_{st.session_state.ชื่อโครงการ}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
                     )
