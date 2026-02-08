@@ -2,13 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-โปรแกรมวิเคราะห์ต้นทุนตลอดอายุการใช้งานผิวทาง (LCCA) - เวอร์ชัน 2.0
+โปรแกรมวิเคราะห์ต้นทุนตลอดอายุการใช้งานผิวทาง (LCCA) - เวอร์ชัน 2.1
 Pavement Life-Cycle Cost Analysis Program
 ================================================================================
 พัฒนาสำหรับการเรียนการสอนและงานวิจัยด้านวิศวกรรมทาง
 ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ
 
-คุณสมบัติเวอร์ชัน 2.0:
+คุณสมบัติเวอร์ชัน 2.1:
+- 📤 Upload Excel เพื่อกรอกข้อมูลต้นทุนก่อสร้าง
+- 📥 ดาวน์โหลด Template Excel
+- 🔄 เปิด/ปิดการคำนวณมูลค่าซาก
+- ⚡ Fast upload method (ไม่ต้องรอ reload)
 - แก้ไขต้นทุนก่อสร้างได้เอง
 - กำหนดพื้นที่โครงการได้เอง
 - เพิ่มผิวทาง JRCP (Jointed Reinforced Concrete Pavement)
@@ -33,6 +37,7 @@ from dataclasses import dataclass, field
 import json
 import io
 from datetime import datetime
+import hashlib
 
 # สำหรับส่งออก Word
 try:
@@ -48,7 +53,7 @@ except ImportError:
 
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(
-    page_title="โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.0",
+    page_title="โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.1",
     page_icon="🛣️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -203,25 +208,8 @@ def สร้างตารางกระแสเงินสด(
                             'มูลค่าปัจจุบัน': ต้นทุน * pwf
                         })
                     ปี += บำรุง.ความถี่
-        else:
-            # บำรุงรักษาครั้งเดียว (ไม่รีเซ็ต แต่ข้ามถ้าตรงกับปีฟื้นฟู)
-            if บำรุง.ปีเริ่มต้น <= ระยะวิเคราะห์ and บำรุง.ปีเริ่มต้น not in ปีฟื้นฟู_set:
-                ต้นทุน = บำรุง.ต้นทุนต่อหน่วย * พื้นที่
-                pwf = (1 + อัตราคิดลด) ** (-บำรุง.ปีเริ่มต้น)
-                รายการ.append({
-                    'ปี': บำรุง.ปีเริ่มต้น,
-                    'กิจกรรม': บำรุง.ชื่อกิจกรรม,
-                    'ประเภท': 'บำรุงรักษา',
-                    'ต้นทุนต่อหน่วย': บำรุง.ต้นทุนต่อหน่วย,
-                    'ต้นทุนตามปี': ต้นทุน,
-                    'ตัวคูณ_PW': pwf,
-                    'มูลค่าปัจจุบัน': ต้นทุน * pwf
-                })
     
     # กิจกรรมฟื้นฟูสภาพ
-    ต้นทุนฟื้นฟูสุดท้าย = ทางเลือก.ต้นทุนก่อสร้าง * พื้นที่
-    ปีฟื้นฟูสุดท้าย = 0
-    
     for ฟื้นฟู in ทางเลือก.แผนฟื้นฟูสภาพ:
         if ฟื้นฟู.ปีดำเนินการ <= ระยะวิเคราะห์:
             ต้นทุน = ฟื้นฟู.ต้นทุนต่อหน่วย * พื้นที่
@@ -235,877 +223,642 @@ def สร้างตารางกระแสเงินสด(
                 'ตัวคูณ_PW': pwf,
                 'มูลค่าปัจจุบัน': ต้นทุน * pwf
             })
-            ต้นทุนฟื้นฟูสุดท้าย = ต้นทุน
-            ปีฟื้นฟูสุดท้าย = ฟื้นฟู.ปีดำเนินการ
     
-    # มูลค่าซาก
-    if รวมมูลค่าซาก:
-        # กำหนดอายุที่คาดหวังตามประเภทผิวทาง
-        if 'Flexible' in ทางเลือก.ประเภท or 'ยืดหยุ่น' in ทางเลือก.ประเภท:
-            อายุที่คาดหวัง = 15
-        elif 'CRCP' in ทางเลือก.ประเภท:
-            อายุที่คาดหวัง = 25
-        else:  # JPCP, JRCP
-            อายุที่คาดหวัง = 20
+    # มูลค่าซาก (ถ้าเปิดใช้งาน)
+    if รวมมูลค่าซาก and len(ปีฟื้นฟูทั้งหมด) > 0:
+        ปีฟื้นฟูสุดท้าย = max(ปีฟื้นฟูทั้งหมด)
+        กิจกรรมฟื้นฟูสุดท้าย = [ฟ for ฟ in ทางเลือก.แผนฟื้นฟูสภาพ if ฟ.ปีดำเนินการ == ปีฟื้นฟูสุดท้าย]
+        
+        if len(กิจกรรมฟื้นฟูสุดท้าย) > 0:
+            ต้นทุนฟื้นฟูสุดท้าย = sum([ฟ.ต้นทุนต่อหน่วย * พื้นที่ for ฟ in กิจกรรมฟื้นฟูสุดท้าย])
+            อายุใช้งาน = 20  # สมมติอายุใช้งาน 20 ปี
             
-        sv = คำนวณมูลค่าซาก(
-            ต้นทุนฟื้นฟูสุดท้าย, ปีฟื้นฟูสุดท้าย, อายุที่คาดหวัง,
-            ระยะวิเคราะห์, ทางเลือก.ร้อยละมูลค่าซาก
-        )
-        pwf = (1 + อัตราคิดลด) ** (-ระยะวิเคราะห์)
-        รายการ.append({
-            'ปี': ระยะวิเคราะห์,
-            'กิจกรรม': 'มูลค่าซาก',
-            'ประเภท': 'มูลค่าซาก',
-            'ต้นทุนต่อหน่วย': -sv / พื้นที่,
-            'ต้นทุนตามปี': -sv,
-            'ตัวคูณ_PW': pwf,
-            'มูลค่าปัจจุบัน': -sv * pwf
-        })
+            มูลค่าซาก = คำนวณมูลค่าซาก(
+                ต้นทุนฟื้นฟูสุดท้าย,
+                ปีฟื้นฟูสุดท้าย,
+                อายุใช้งาน,
+                ระยะวิเคราะห์,
+                ทางเลือก.ร้อยละมูลค่าซาก
+            )
+            
+            pwf = (1 + อัตราคิดลด) ** (-ระยะวิเคราะห์)
+            รายการ.append({
+                'ปี': ระยะวิเคราะห์,
+                'กิจกรรม': 'มูลค่าซาก',
+                'ประเภท': 'มูลค่าซาก',
+                'ต้นทุนต่อหน่วย': -มูลค่าซาก / พื้นที่,
+                'ต้นทุนตามปี': -มูลค่าซาก,
+                'ตัวคูณ_PW': pwf,
+                'มูลค่าปัจจุบัน': -มูลค่าซาก * pwf
+            })
     
+    # สร้าง DataFrame และเรียงตามปี
     df = pd.DataFrame(รายการ)
-    df = df.sort_values(['ปี', 'กิจกรรม']).reset_index(drop=True)
+    df = df.sort_values('ปี').reset_index(drop=True)
     
     return df
 
 
 # =============================================================================
-# ส่วนที่ 4: เครื่องมือวิเคราะห์ LCCA
+# ส่วนที่ 4: ฟังก์ชันวิเคราะห์ LCCA
 # =============================================================================
 
 def วิเคราะห์_LCCA(
     ทางเลือกทั้งหมด: List[ทางเลือกผิวทาง],
     ระยะวิเคราะห์: int,
-    อัตราคิดลด: float
+    อัตราคิดลด: float,
+    รวมมูลค่าซาก: bool = True
 ) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
-    """วิเคราะห์ LCCA สำหรับทางเลือกผิวทางหลายทางเลือก"""
-    สรุป_รายการ = []
-    กระแสเงินสด_dict = {}
+    """
+    วิเคราะห์ LCCA สำหรับทางเลือกทั้งหมด
     
-    # กรองเฉพาะทางเลือกที่เปิดใช้งาน
-    ทางเลือกที่ใช้ = [ท for ท in ทางเลือกทั้งหมด if ท.เปิดใช้งาน]
+    Returns:
+        สรุปผล (DataFrame), กระแสเงินสดแต่ละทางเลือก (Dict)
+    """
+    สรุป = []
+    กระแสเงินสด = {}
     
-    for ทางเลือก in ทางเลือกที่ใช้:
-        cf_table = สร้างตารางกระแสเงินสด(ทางเลือก, ระยะวิเคราะห์, อัตราคิดลด)
-        กระแสเงินสด_dict[ทางเลือก.ชื่อ] = cf_table
+    for ทางเลือก in ทางเลือกทั้งหมด:
+        if not ทางเลือก.เปิดใช้งาน:
+            continue
+        
+        # สร้างตารางกระแสเงินสด
+        cf_table = สร้างตารางกระแสเงินสด(ทางเลือก, ระยะวิเคราะห์, อัตราคิดลด, รวมมูลค่าซาก)
+        กระแสเงินสด[ทางเลือก.ชื่อ] = cf_table
         
         # คำนวณผลรวม
-        รวม_nominal = cf_table['ต้นทุนตามปี'].sum()
-        รวม_pw = cf_table['มูลค่าปัจจุบัน'].sum()
-        eac = คำนวณต้นทุนเฉลี่ยรายปี(รวม_pw, อัตราคิดลด, ระยะวิเคราะห์)
+        มูลค่าปัจจุบันรวม = cf_table['มูลค่าปัจจุบัน'].sum()
+        ต้นทุนเฉลี่ยรายปี = คำนวณต้นทุนเฉลี่ยรายปี(มูลค่าปัจจุบันรวม, อัตราคิดลด, ระยะวิเคราะห์)
         
-        ก่อสร้าง = cf_table[cf_table['ประเภท'] == 'ก่อสร้าง']['มูลค่าปัจจุบัน'].sum()
-        บำรุงรักษา = cf_table[cf_table['ประเภท'] == 'บำรุงรักษา']['มูลค่าปัจจุบัน'].sum()
-        ฟื้นฟู = cf_table[cf_table['ประเภท'] == 'ฟื้นฟูสภาพ']['มูลค่าปัจจุบัน'].sum()
-        ซาก = cf_table[cf_table['ประเภท'] == 'มูลค่าซาก']['มูลค่าปัจจุบัน'].sum()
+        # คำนวณต้นทุนแยกตามประเภท
+        ต้นทุนก่อสร้าง = cf_table[cf_table['ประเภท'] == 'ก่อสร้าง']['มูลค่าปัจจุบัน'].sum()
+        ต้นทุนบำรุงรักษา = cf_table[cf_table['ประเภท'] == 'บำรุงรักษา']['มูลค่าปัจจุบัน'].sum()
+        ต้นทุนฟื้นฟู = cf_table[cf_table['ประเภท'] == 'ฟื้นฟูสภาพ']['มูลค่าปัจจุบัน'].sum()
+        มูลค่าซาก_pv = cf_table[cf_table['ประเภท'] == 'มูลค่าซาก']['มูลค่าปัจจุบัน'].sum()
         
-        # ตรวจสอบ attribute ความหนา
-        ความหนา = getattr(ทางเลือก, 'ความหนา', 0.0)
-        
-        สรุป_รายการ.append({
+        สรุป.append({
             'ทางเลือก': ทางเลือก.ชื่อ,
-            'ประเภทผิวทาง': ทางเลือก.ประเภท,
-            'ความหนา_ซม': ความหนา,
-            'พื้นที่_ตรม': ทางเลือก.พื้นที่,
-            'ต้นทุนก่อสร้าง_ตรม': ทางเลือก.ต้นทุนก่อสร้าง,
-            'PW_ก่อสร้าง': ก่อสร้าง,
-            'PW_บำรุงรักษา': บำรุงรักษา,
-            'PW_ฟื้นฟูสภาพ': ฟื้นฟู,
-            'PW_มูลค่าซาก': ซาก,
-            'ต้นทุนตามปีรวม': รวม_nominal,
-            'มูลค่าปัจจุบันรวม': รวม_pw,
-            'ต้นทุนเฉลี่ยรายปี': eac,
-            'ต้นทุนต่อตรม_ต่อปี': eac / ทางเลือก.พื้นที่
+            'ประเภท': ทางเลือก.ประเภท,
+            'ต้นทุนก่อสร้าง (PW)': ต้นทุนก่อสร้าง,
+            'ต้นทุนบำรุงรักษา (PW)': ต้นทุนบำรุงรักษา,
+            'ต้นทุนฟื้นฟู (PW)': ต้นทุนฟื้นฟู,
+            'มูลค่าซาก (PW)': มูลค่าซาก_pv,
+            'มูลค่าปัจจุบันรวม (PW)': มูลค่าปัจจุบันรวม,
+            'ต้นทุนเฉลี่ยรายปี (EAC)': ต้นทุนเฉลี่ยรายปี
         })
     
-    สรุป_df = pd.DataFrame(สรุป_รายการ)
-    if len(สรุป_df) > 0:
-        สรุป_df['ลำดับ'] = สรุป_df['มูลค่าปัจจุบันรวม'].rank().astype(int)
-        สรุป_df = สรุป_df.sort_values('มูลค่าปัจจุบันรวม').reset_index(drop=True)
+    df_สรุป = pd.DataFrame(สรุป)
     
-    return สรุป_df, กระแสเงินสด_dict
+    return df_สรุป, กระแสเงินสด
 
-
-# =============================================================================
-# ส่วนที่ 5: การวิเคราะห์ความไว
-# =============================================================================
 
 def วิเคราะห์ความไว_อัตราคิดลด(
     ทางเลือกทั้งหมด: List[ทางเลือกผิวทาง],
     ระยะวิเคราะห์: int,
-    อัตราฐาน: float,
-    ช่วงการเปลี่ยนแปลง: float = 0.02,
-    จำนวนจุด: int = 5
+    อัตราคิดลดกลาง: float,
+    ช่วงอัตราคิดลด: Tuple[float, float],
+    รวมมูลค่าซาก: bool = True
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """วิเคราะห์ความไวต่ออัตราคิดลด"""
-    อัตราทดสอบ = np.linspace(อัตราฐาน - ช่วงการเปลี่ยนแปลง, 
-                              อัตราฐาน + ช่วงการเปลี่ยนแปลง, จำนวนจุด)
+    อัตราต่ำสุด, อัตราสูงสุด = ช่วงอัตราคิดลด
+    รายการอัตรา = np.arange(อัตราต่ำสุด, อัตราสูงสุด + 0.005, 0.01)
+    
     ผลลัพธ์ = []
     
-    ทางเลือกที่ใช้ = [ท for ท in ทางเลือกทั้งหมด if ท.เปิดใช้งาน]
-    
-    for อัตรา in อัตราทดสอบ:
-        for ทางเลือก in ทางเลือกที่ใช้:
-            cf = สร้างตารางกระแสเงินสด(ทางเลือก, ระยะวิเคราะห์, อัตรา)
-            pw = cf['มูลค่าปัจจุบัน'].sum()
+    for อัตรา in รายการอัตรา:
+        สรุป, _ = วิเคราะห์_LCCA(ทางเลือกทั้งหมด, ระยะวิเคราะห์, อัตรา, รวมมูลค่าซาก)
+        
+        for _, row in สรุป.iterrows():
             ผลลัพธ์.append({
                 'อัตราคิดลด': อัตรา,
-                'อัตราคิดลด_%': f"{อัตรา*100:.1f}%",
-                'ทางเลือก': ทางเลือก.ชื่อ,
-                'มูลค่าปัจจุบัน': pw,
-                'ต้นทุนเฉลี่ยรายปี': คำนวณต้นทุนเฉลี่ยรายปี(pw, อัตรา, ระยะวิเคราะห์)
+                'ทางเลือก': row['ทางเลือก'],
+                'มูลค่าปัจจุบัน': row['มูลค่าปัจจุบันรวม (PW)']
             })
     
-    df = pd.DataFrame(ผลลัพธ์)
-    pivot = df.pivot(index='อัตราคิดลด_%', columns='ทางเลือก', values='มูลค่าปัจจุบัน') if len(df) > 0 else pd.DataFrame()
+    df_ผล = pd.DataFrame(ผลลัพธ์)
     
-    return df, pivot
+    # สร้าง pivot table
+    pivot = df_ผล.pivot(index='อัตราคิดลด', columns='ทางเลือก', values='มูลค่าปัจจุบัน')
+    
+    return df_ผล, pivot
 
 
 # =============================================================================
-# ส่วนที่ 6: ข้อมูลตัวอย่างเริ่มต้น (รวม JRCP)
+# ส่วนที่ 5: Excel Template และ Upload Functions
 # =============================================================================
 
-def สร้างทางเลือกเริ่มต้น() -> List[ทางเลือกผิวทาง]:
-    """สร้างทางเลือกผิวทางเริ่มต้น 4 ประเภท"""
+def สร้าง_excel_template() -> io.BytesIO:
+    """สร้าง Excel template สำหรับผู้ใช้กรอกข้อมูล"""
     
-    # 1. ผิวทางยืดหยุ่น (Flexible Pavement)
-    flexible = ทางเลือกผิวทาง(
-        ชื่อ="ผิวทางยืดหยุ่น (AC)",
-        ประเภท="Flexible",
-        ต้นทุนก่อสร้าง=1800.0,
-        แผนบำรุงรักษา=[
-            กิจกรรมบำรุงรักษา("Seal Coating", 25.0, ปีเริ่มต้น=3, ความถี่=3),
-            กิจกรรมบำรุงรักษา("ซ่อมเฉพาะจุด", 50.0, ปีเริ่มต้น=5, ความถี่=5),
-        ],
-        แผนฟื้นฟูสภาพ=[
-            กิจกรรมฟื้นฟูสภาพ("Overlay AC 50 มม.", 450.0, ปีดำเนินการ=12),
-            กิจกรรมฟื้นฟูสภาพ("ก่อสร้าง AC ใหม่", 650.0, ปีดำเนินการ=24),
-        ],
-        ร้อยละมูลค่าซาก=20.0,
-        พื้นที่=10000.0,
-        ความหนา=15.0,
-        เปิดใช้งาน=True
-    )
-    
-    # 2. JPCP - Jointed Plain Concrete Pavement (คอนกรีตไม่เสริมเหล็ก)
-    jpcp = ทางเลือกผิวทาง(
-        ชื่อ="JPCP",
-        ประเภท="JPCP",
-        ต้นทุนก่อสร้าง=2800.0,
-        แผนบำรุงรักษา=[
-            กิจกรรมบำรุงรักษา("Seal Coating", 35.0, ปีเริ่มต้น=5, ความถี่=5),
-            กิจกรรมบำรุงรักษา("ซ่อมเฉพาะจุด", 40.0, ปีเริ่มต้น=10, ความถี่=10),
-        ],
-        แผนฟื้นฟูสภาพ=[
-            กิจกรรมฟื้นฟูสภาพ("Diamond Grinding", 180.0, ปีดำเนินการ=20),
-            กิจกรรมฟื้นฟูสภาพ("Overlay AC 100 มม.", 550.0, ปีดำเนินการ=30),
-        ],
-        ร้อยละมูลค่าซาก=30.0,
-        พื้นที่=10000.0,
-        ความหนา=30.0,
-        เปิดใช้งาน=True
-    )
-    
-    # 3. JRCP - Jointed Reinforced Concrete Pavement (คอนกรีตเสริมเหล็ก)
-    jrcp = ทางเลือกผิวทาง(
-        ชื่อ="JRCP",
-        ประเภท="JRCP",
-        ต้นทุนก่อสร้าง=3000.0,
-        แผนบำรุงรักษา=[
-            กิจกรรมบำรุงรักษา("Seal Coating", 35.0, ปีเริ่มต้น=6, ความถี่=6),
-            กิจกรรมบำรุงรักษา("ซ่อมเฉพาะจุด", 35.0, ปีเริ่มต้น=12, ความถี่=12),
-        ],
-        แผนฟื้นฟูสภาพ=[
-            กิจกรรมฟื้นฟูสภาพ("Diamond Grinding", 180.0, ปีดำเนินการ=22),
-            กิจกรรมฟื้นฟูสภาพ("Overlay AC 100 มม.", 550.0, ปีดำเนินการ=32),
-        ],
-        ร้อยละมูลค่าซาก=32.0,
-        พื้นที่=10000.0,
-        ความหนา=25.0,
-        เปิดใช้งาน=True
-    )
-    
-    # 4. CRCP - Continuously Reinforced Concrete Pavement
-    crcp = ทางเลือกผิวทาง(
-        ชื่อ="CRCP",
-        ประเภท="CRCP",
-        ต้นทุนก่อสร้าง=3500.0,
-        แผนบำรุงรักษา=[
-            กิจกรรมบำรุงรักษา("Seal Coating", 15.0, ปีเริ่มต้น=8, ความถี่=8),
-            กิจกรรมบำรุงรักษา("ซ่อมเฉพาะจุด", 30.0, ปีเริ่มต้น=12, ความถี่=12),
-        ],
-        แผนฟื้นฟูสภาพ=[
-            กิจกรรมฟื้นฟูสภาพ("Diamond Grinding", 180.0, ปีดำเนินการ=25),
-            กิจกรรมฟื้นฟูสภาพ("Overlay AC 100 มม.", 550.0, ปีดำเนินการ=35),
-        ],
-        ร้อยละมูลค่าซาก=35.0,
-        พื้นที่=10000.0,
-        ความหนา=25.0,
-        เปิดใช้งาน=True
-    )
-    
-    return [flexible, jpcp, jrcp, crcp]
-
-
-# =============================================================================
-# ส่วนที่ 7: ฟังก์ชัน JSON Import/Export
-# =============================================================================
-
-def ทางเลือก_เป็น_dict(ทางเลือก: ทางเลือกผิวทาง) -> dict:
-    """แปลงทางเลือกเป็น Dictionary"""
-    return {
-        'ชื่อ': ทางเลือก.ชื่อ,
-        'ประเภท': ทางเลือก.ประเภท,
-        'ต้นทุนก่อสร้าง': ทางเลือก.ต้นทุนก่อสร้าง,
-        'ร้อยละมูลค่าซาก': ทางเลือก.ร้อยละมูลค่าซาก,
-        'พื้นที่': ทางเลือก.พื้นที่,
-        'ความหนา': getattr(ทางเลือก, 'ความหนา', 0.0),
-        'เปิดใช้งาน': getattr(ทางเลือก, 'เปิดใช้งาน', True),
-        'แผนบำรุงรักษา': [
-            {
-                'ชื่อกิจกรรม': ม.ชื่อกิจกรรม,
-                'ต้นทุนต่อหน่วย': ม.ต้นทุนต่อหน่วย,
-                'ปีเริ่มต้น': ม.ปีเริ่มต้น,
-                'ความถี่': ม.ความถี่
-            }
-            for ม in ทางเลือก.แผนบำรุงรักษา
-        ],
-        'แผนฟื้นฟูสภาพ': [
-            {
-                'ชื่อกิจกรรม': ฟ.ชื่อกิจกรรม,
-                'ต้นทุนต่อหน่วย': ฟ.ต้นทุนต่อหน่วย,
-                'ปีดำเนินการ': ฟ.ปีดำเนินการ
-            }
-            for ฟ in ทางเลือก.แผนฟื้นฟูสภาพ
-        ]
+    # สร้างข้อมูลตัวอย่าง
+    data = {
+        'ผิวทาง': ['AC', 'JPCP', 'JRCP', 'CRCP'],
+        'ประเภทผิวทาง': ['ลาดยาง', 'คอนกรีต', 'คอนกรีต', 'คอนกรีต'],
+        'ความหนาผิวทาง (ซม.)': ['กรอกข้อมูล', 'กรอกข้อมูล', 'กรอกข้อมูล', 'กรอกข้อมูล'],
+        'ต้นทุนก่อสร้าง (บาท/ตร.ม.)': ['กรอกข้อมูล', 'กรอกข้อมูล', 'กรอกข้อมูล', 'กรอกข้อมูล']
     }
+    
+    df = pd.DataFrame(data)
+    
+    # สร้าง Excel file
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # เขียน header
+        header_df = pd.DataFrame([['ข้อมูลสำหรับวิเคราะห์ LCCA']])
+        header_df.to_excel(writer, sheet_name='Sheet1', index=False, header=False)
+        
+        # เขียนข้อมูล
+        df.to_excel(writer, sheet_name='Sheet1', index=False, startrow=1)
+        
+        # จัดรูปแบบ
+        worksheet = writer.sheets['Sheet1']
+        
+        # ตั้งค่าความกว้างคอลัมน์
+        worksheet.column_dimensions['A'].width = 15
+        worksheet.column_dimensions['B'].width = 20
+        worksheet.column_dimensions['C'].width = 25
+        worksheet.column_dimensions['D'].width = 30
+    
+    output.seek(0)
+    return output
 
 
-def dict_เป็น_ทางเลือก(data: dict) -> ทางเลือกผิวทาง:
-    """แปลง Dictionary เป็นทางเลือก"""
-    แผนบำรุง = [
-        กิจกรรมบำรุงรักษา(
-            ชื่อกิจกรรม=ม['ชื่อกิจกรรม'],
-            ต้นทุนต่อหน่วย=ม['ต้นทุนต่อหน่วย'],
-            ปีเริ่มต้น=ม['ปีเริ่มต้น'],
-            ความถี่=ม['ความถี่']
-        )
-        for ม in data['แผนบำรุงรักษา']
-    ]
+def อ่านข้อมูลจาก_excel(uploaded_file) -> Dict[str, float]:
+    """
+    อ่านข้อมูลจากไฟล์ Excel ที่ผู้ใช้ upload
     
-    แผนฟื้นฟู = [
-        กิจกรรมฟื้นฟูสภาพ(
-            ชื่อกิจกรรม=ฟ['ชื่อกิจกรรม'],
-            ต้นทุนต่อหน่วย=ฟ['ต้นทุนต่อหน่วย'],
-            ปีดำเนินการ=ฟ['ปีดำเนินการ']
-        )
-        for ฟ in data['แผนฟื้นฟูสภาพ']
-    ]
+    Returns:
+        Dict mapping ชื่อผิวทาง -> ต้นทุนก่อสร้าง
+    """
+    try:
+        # อ่านไฟล์ Excel โดยข้าม header row
+        df = pd.read_excel(uploaded_file, sheet_name='Sheet1', header=1)
+        
+        # สร้าง dictionary
+        ข้อมูลต้นทุน = {}
+        
+        for idx, row in df.iterrows():
+            ชื่อ = row['ผิวทาง']
+            ต้นทุน_str = str(row['ต้นทุนก่อสร้าง (บาท/ตร.ม.)'])
+            
+            # แปลงเป็นตัวเลข
+            try:
+                ต้นทุน = float(ต้นทุน_str.replace(',', ''))
+                ข้อมูลต้นทุน[ชื่อ] = ต้นทุน
+            except:
+                continue
+        
+        return ข้อมูลต้นทุน
     
-    return ทางเลือกผิวทาง(
-        ชื่อ=data['ชื่อ'],
-        ประเภท=data['ประเภท'],
-        ต้นทุนก่อสร้าง=data['ต้นทุนก่อสร้าง'],
-        แผนบำรุงรักษา=แผนบำรุง,
-        แผนฟื้นฟูสภาพ=แผนฟื้นฟู,
-        ร้อยละมูลค่าซาก=data.get('ร้อยละมูลค่าซาก', 20.0),
-        พื้นที่=data.get('พื้นที่', 10000.0),
-        ความหนา=data.get('ความหนา', 0.0),
-        เปิดใช้งาน=data.get('เปิดใช้งาน', True)
-    )
+    except Exception as e:
+        st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {str(e)}")
+        return {}
 
 
 # =============================================================================
-# ส่วนที่ 8: ฟังก์ชันส่งออก Word
+# ส่วนที่ 6: ฟังก์ชันสร้างรายงาน Word
 # =============================================================================
 
-def สร้างรายงาน_Word(
+def สร้างรายงาน_word(
+    ชื่อโครงการ: str,
     สรุป: pd.DataFrame,
     กระแสเงินสด: Dict[str, pd.DataFrame],
     ระยะวิเคราะห์: int,
     อัตราคิดลด: float,
-    ทางเลือกทั้งหมด: List[ทางเลือกผิวทาง],
-    ชื่อโครงการ: str = "โครงการก่อสร้างทางหลวง"
+    รวมมูลค่าซาก: bool
 ) -> io.BytesIO:
-    """สร้างรายงาน LCCA ในรูปแบบ Word"""
+    """สร้างรายงาน Word"""
+    
+    if not DOCX_AVAILABLE:
+        return None
     
     doc = WordDocument()
     
-    # ตั้งค่าฟอนต์เริ่มต้น
+    # ตั้งค่า font ภาษาไทย
     style = doc.styles['Normal']
-    style.font.name = 'TH Sarabun New'
-    style.font.size = Pt(14)
+    font = style.font
+    font.name = 'TH Sarabun New'
+    font.size = Pt(16)
     
-    # หัวข้อรายงาน
-    title = doc.add_heading('รายงานการวิเคราะห์ต้นทุนตลอดอายุการใช้งานผิวทาง (LCCA)', level=0)
+    # หัวเรื่อง
+    title = doc.add_heading('รายงานการวิเคราะห์ต้นทุนตลอดอายุการใช้งาน', 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # ชื่อโครงการ
-    project_title = doc.add_heading(ชื่อโครงการ, level=1)
-    project_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # ข้อมูลโครงการ
+    doc.add_heading('ข้อมูลโครงการ', 1)
+    info = doc.add_paragraph()
+    info.add_run(f'ชื่อโครงการ: ').bold = True
+    info.add_run(f'{ชื่อโครงการ}\n')
+    info.add_run(f'ระยะเวลาวิเคราะห์: ').bold = True
+    info.add_run(f'{ระยะวิเคราะห์} ปี\n')
+    info.add_run(f'อัตราคิดลด: ').bold = True
+    info.add_run(f'{อัตราคิดลด*100:.1f}%\n')
+    info.add_run(f'รวมมูลค่าซาก: ').bold = True
+    info.add_run(f'{"ใช่" if รวมมูลค่าซาก else "ไม่"}\n')
+    info.add_run(f'วันที่จัดทำ: ').bold = True
+    info.add_run(f'{datetime.now().strftime("%d/%m/%Y %H:%M")}\n')
     
-    doc.add_paragraph()
+    # ตารางสรุป
+    doc.add_heading('สรุปผลการวิเคราะห์', 1)
     
-    # ข้อมูลทั่วไป
-    doc.add_heading('1. ข้อมูลทั่วไป', level=1)
-    doc.add_paragraph(f'ชื่อโครงการ: {ชื่อโครงการ}')
-    doc.add_paragraph(f'วันที่วิเคราะห์: {datetime.now().strftime("%d/%m/%Y %H:%M")}')
-    doc.add_paragraph(f'ระยะเวลาวิเคราะห์: {ระยะวิเคราะห์} ปี')
-    doc.add_paragraph(f'อัตราคิดลด: {อัตราคิดลด*100:.1f}%')
-    doc.add_paragraph(f'จำนวนทางเลือก: {len(สรุป)} ทางเลือก')
+    # สร้างตาราง
+    table = doc.add_table(rows=1, cols=len(สรุป.columns))
+    table.style = 'Light Grid Accent 1'
     
-    # ตารางทางเลือกที่วิเคราะห์
-    doc.add_heading('2. ทางเลือกผิวทางที่วิเคราะห์', level=1)
+    # Header
+    hdr_cells = table.rows[0].cells
+    for i, col_name in enumerate(สรุป.columns):
+        hdr_cells[i].text = col_name
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
     
-    # สร้างตารางข้อมูลทางเลือก
-    table1 = doc.add_table(rows=1, cols=5)
-    table1.style = 'Table Grid'
-    table1.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
-    # หัวตาราง
-    hdr_cells = table1.rows[0].cells
-    headers1 = ['ทางเลือก', 'ประเภท', 'ความหนา (ซม.)', 'พื้นที่ (ตร.ม.)', 'ต้นทุนก่อสร้าง (บาท/ตร.ม.)']
-    for i, header in enumerate(headers1):
-        hdr_cells[i].text = header
-        hdr_cells[i].paragraphs[0].runs[0].bold = True
-    
-    # ข้อมูลทางเลือก
+    # Data
     for _, row in สรุป.iterrows():
-        row_cells = table1.add_row().cells
-        row_cells[0].text = str(row['ทางเลือก'])
-        row_cells[1].text = str(row['ประเภทผิวทาง'])
-        row_cells[2].text = f"{row['ความหนา_ซม']:.1f}"
-        row_cells[3].text = f"{row['พื้นที่_ตรม']:,.0f}"
-        row_cells[4].text = f"{row['ต้นทุนก่อสร้าง_ตรม']:,.0f}"
+        row_cells = table.add_row().cells
+        for i, value in enumerate(row):
+            if isinstance(value, (int, float)) and i > 1:  # ตัวเลข
+                row_cells[i].text = f'{value:,.0f}'
+            else:
+                row_cells[i].text = str(value)
     
-    doc.add_paragraph()
-    
-    # ผลการวิเคราะห์
-    doc.add_heading('3. ผลการวิเคราะห์ LCCA', level=1)
-    
-    # ตารางผลการวิเคราะห์
-    table2 = doc.add_table(rows=1, cols=5)
-    table2.style = 'Table Grid'
-    table2.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
-    hdr_cells2 = table2.rows[0].cells
-    headers2 = ['ลำดับ', 'ทางเลือก', 'มูลค่าปัจจุบันรวม (บาท)', 'EAC (บาท/ปี)', 'ต้นทุน (บาท/ตร.ม./ปี)']
-    for i, header in enumerate(headers2):
-        hdr_cells2[i].text = header
-        hdr_cells2[i].paragraphs[0].runs[0].bold = True
-    
-    for _, row in สรุป.iterrows():
-        row_cells = table2.add_row().cells
-        row_cells[0].text = str(int(row['ลำดับ']))
-        row_cells[1].text = str(row['ทางเลือก'])
-        row_cells[2].text = f"{row['มูลค่าปัจจุบันรวม']:,.0f}"
-        row_cells[3].text = f"{row['ต้นทุนเฉลี่ยรายปี']:,.0f}"
-        row_cells[4].text = f"{row['ต้นทุนต่อตรม_ต่อปี']:,.2f}"
-    
-    doc.add_paragraph()
-    
-    # องค์ประกอบต้นทุน
-    doc.add_heading('4. องค์ประกอบต้นทุน (มูลค่าปัจจุบัน)', level=1)
-    
-    table3 = doc.add_table(rows=1, cols=6)
-    table3.style = 'Table Grid'
-    table3.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
-    hdr_cells3 = table3.rows[0].cells
-    headers3 = ['ทางเลือก', 'ก่อสร้าง (บาท)', 'บำรุงรักษา (บาท)', 'ฟื้นฟูสภาพ (บาท)', 'มูลค่าซาก (บาท)', 'รวม (บาท)']
-    for i, header in enumerate(headers3):
-        hdr_cells3[i].text = header
-        hdr_cells3[i].paragraphs[0].runs[0].bold = True
-    
-    for _, row in สรุป.iterrows():
-        row_cells = table3.add_row().cells
-        row_cells[0].text = str(row['ทางเลือก'])
-        row_cells[1].text = f"{row['PW_ก่อสร้าง']:,.0f}"
-        row_cells[2].text = f"{row['PW_บำรุงรักษา']:,.0f}"
-        row_cells[3].text = f"{row['PW_ฟื้นฟูสภาพ']:,.0f}"
-        row_cells[4].text = f"{row['PW_มูลค่าซาก']:,.0f}"
-        row_cells[5].text = f"{row['มูลค่าปัจจุบันรวม']:,.0f}"
-    
-    doc.add_paragraph()
-    
-    # สรุปผล
-    doc.add_heading('5. สรุปผลการวิเคราะห์', level=1)
-    
-    ผู้ชนะ = สรุป.iloc[0]
-    doc.add_paragraph(f'ทางเลือกที่ประหยัดที่สุด: {ผู้ชนะ["ทางเลือก"]}')
-    doc.add_paragraph(f'มูลค่าปัจจุบันรวม: {ผู้ชนะ["มูลค่าปัจจุบันรวม"]:,.0f} บาท')
-    doc.add_paragraph(f'ต้นทุนเฉลี่ยรายปี (EAC): {ผู้ชนะ["ต้นทุนเฉลี่ยรายปี"]:,.0f} บาท/ปี')
-    
-    if len(สรุป) > 1:
-        doc.add_paragraph()
-        doc.add_paragraph('การเปรียบเทียบกับทางเลือกอื่น:')
-        for idx in range(1, len(สรุป)):
-            อื่น = สรุป.iloc[idx]
-            ส่วนต่าง = อื่น['มูลค่าปัจจุบันรวม'] - ผู้ชนะ['มูลค่าปัจจุบันรวม']
-            ร้อยละ = (ส่วนต่าง / อื่น['มูลค่าปัจจุบันรวม']) * 100
-            doc.add_paragraph(f'  - vs {อื่น["ทางเลือก"]}: ประหยัด {ส่วนต่าง:,.0f} บาท ({ร้อยละ:.1f}%)')
-    
-    # กระแสเงินสดรายละเอียด
+    # กระแสเงินสดแต่ละทางเลือก
     doc.add_page_break()
-    doc.add_heading('6. รายละเอียดกระแสเงินสดแต่ละทางเลือก', level=1)
+    doc.add_heading('รายละเอียดกระแสเงินสด', 1)
     
-    for ชื่อทางเลือก, cf_table in กระแสเงินสด.items():
-        doc.add_heading(f'6.{list(กระแสเงินสด.keys()).index(ชื่อทางเลือก)+1} {ชื่อทางเลือก}', level=2)
+    for ชื่อทางเลือก, cf_df in กระแสเงินสด.items():
+        doc.add_heading(f'ทางเลือก: {ชื่อทางเลือก}', 2)
         
-        # สร้างตารางกระแสเงินสด
-        table_cf = doc.add_table(rows=1, cols=5)
-        table_cf.style = 'Table Grid'
+        # สร้างตาราง
+        cf_table = doc.add_table(rows=1, cols=len(cf_df.columns))
+        cf_table.style = 'Light List Accent 1'
         
-        hdr_cf = table_cf.rows[0].cells
-        headers_cf = ['ปี', 'กิจกรรม', 'ต้นทุนตามปี (บาท)', 'ตัวคูณ PW', 'มูลค่าปัจจุบัน (บาท)']
-        for i, header in enumerate(headers_cf):
-            hdr_cf[i].text = header
-            hdr_cf[i].paragraphs[0].runs[0].bold = True
+        # Header
+        hdr_cells = cf_table.rows[0].cells
+        for i, col_name in enumerate(cf_df.columns):
+            hdr_cells[i].text = col_name
+            hdr_cells[i].paragraphs[0].runs[0].font.bold = True
         
-        for _, row in cf_table.iterrows():
-            row_cells = table_cf.add_row().cells
-            row_cells[0].text = str(int(row['ปี']))
-            row_cells[1].text = str(row['กิจกรรม'])
-            row_cells[2].text = f"{row['ต้นทุนตามปี']:,.0f}"
-            row_cells[3].text = f"{row['ตัวคูณ_PW']:.4f}"
-            row_cells[4].text = f"{row['มูลค่าปัจจุบัน']:,.0f}"
+        # Data (แสดงแค่ 20 แถวแรก)
+        for idx, (_, row) in enumerate(cf_df.head(20).iterrows()):
+            row_cells = cf_table.add_row().cells
+            for i, value in enumerate(row):
+                if isinstance(value, float):
+                    if i == 5:  # ตัวคูณ PW
+                        row_cells[i].text = f'{value:.4f}'
+                    else:
+                        row_cells[i].text = f'{value:,.2f}'
+                else:
+                    row_cells[i].text = str(value)
         
-        # รวม
-        row_total = table_cf.add_row().cells
-        row_total[0].text = ''
-        row_total[1].text = 'รวม'
-        row_total[1].paragraphs[0].runs[0].bold = True
-        row_total[2].text = f"{cf_table['ต้นทุนตามปี'].sum():,.0f}"
-        row_total[3].text = ''
-        row_total[4].text = f"{cf_table['มูลค่าปัจจุบัน'].sum():,.0f}"
-        row_total[4].paragraphs[0].runs[0].bold = True
+        if len(cf_df) > 20:
+            doc.add_paragraph(f'... (แสดง 20 จาก {len(cf_df)} แถว)')
         
         doc.add_paragraph()
     
-    # Footer
-    doc.add_paragraph()
-    doc.add_paragraph('─' * 50)
-    doc.add_paragraph(f'โครงการ: {ชื่อโครงการ}')
-    doc.add_paragraph('รายงานนี้สร้างโดย: โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.0')
-    doc.add_paragraph('ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ')
+    # บันทึกลง BytesIO
+    output = io.BytesIO()
+    doc.save(output)
+    output.seek(0)
     
-    # บันทึกเป็น BytesIO
-    file_stream = io.BytesIO()
-    doc.save(file_stream)
-    file_stream.seek(0)
-    
-    return file_stream
+    return output
 
 
 # =============================================================================
-# ส่วนที่ 9: Streamlit Application
+# ส่วนที่ 7: ฟังก์ชันหลัก (Main Function)
 # =============================================================================
 
 def main():
-    """Main Streamlit Application"""
+    """ฟังก์ชันหลักของโปรแกรม"""
     
-    # หัวข้อหลัก
-    st.title("🛣️ โปรแกรมวิเคราะห์ต้นทุนตลอดอายุการใช้งานผิวทาง (LCCA)")
+    # Custom CSS
     st.markdown("""
-    **Life-Cycle Cost Analysis for Pavement Alternatives - Version 2.0**
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #1f77b4;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 1rem;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    พัฒนาสำหรับการเรียนการสอนและงานวิจัยด้านวิศวกรรมทาง  
-    ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ
-    
-    ✨ **คุณสมบัติใหม่:** แก้ไขต้นทุนและพื้นที่ได้เอง, เพิ่มผิวทาง JRCP, ระบุชื่อโครงการได้
-    """)
-    
-    st.divider()
+    # หัวเรื่อง
+    st.markdown('<div class="main-header">🛣️ โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.1</div>', unsafe_allow_html=True)
+    st.markdown("**Life-Cycle Cost Analysis for Pavement Design**")
     
     # ==========================================================================
-    # Initialize Session State
+    # Sidebar: การตั้งค่าและ Upload
     # ==========================================================================
-    if 'ทางเลือกทั้งหมด' not in st.session_state:
-        st.session_state.ทางเลือกทั้งหมด = สร้างทางเลือกเริ่มต้น()
     
-    # ==========================================================================
-    # Sidebar: พารามิเตอร์การวิเคราะห์
-    # ==========================================================================
     with st.sidebar:
-        st.header("⚙️ พารามิเตอร์การวิเคราะห์")
+        st.header("⚙️ การตั้งค่าโครงการ")
         
-        # ชื่อโครงการ
+        # ข้อมูลพื้นฐาน
         if 'ชื่อโครงการ' not in st.session_state:
-            st.session_state.ชื่อโครงการ = "โครงการก่อสร้างทางหลวง"
+            st.session_state.ชื่อโครงการ = "โครงการทางหลวงสายหลัก"
         
         ชื่อโครงการ = st.text_input(
-            "🏗️ ชื่อโครงการ",
+            "ชื่อโครงการ:",
             value=st.session_state.ชื่อโครงการ,
-            help="ระบุชื่อโครงการสำหรับแสดงในรายงาน",
-            key="project_name_input"
+            key="input_project_name"
         )
         st.session_state.ชื่อโครงการ = ชื่อโครงการ
         
-        st.divider()
-        
-        ระยะวิเคราะห์ = st.slider(
-            "ระยะเวลาวิเคราะห์ (ปี)",
-            min_value=20, max_value=50, value=35, step=5,
-            help="ระยะเวลาที่ใช้ในการวิเคราะห์เปรียบเทียบทางเลือก"
-        )
-        
-        อัตราคิดลด = st.slider(
-            "อัตราคิดลด (%)",
-            min_value=2.0, max_value=10.0, value=4.0, step=0.5,
-            help="Real Discount Rate (ไม่รวมอัตราเงินเฟ้อ)"
-        ) / 100.0
-        
-        st.divider()
-        
-        # พื้นที่โครงการ (ใช้ร่วมกันทุกทางเลือก)
-        st.subheader("📐 พื้นที่โครงการ")
-        พื้นที่ร่วม = st.number_input(
-            "พื้นที่ (ตร.ม.)",
+        พื้นที่โครงการ = st.number_input(
+            "พื้นที่โครงการ (ตร.ม.):",
             min_value=100.0,
             max_value=1000000.0,
             value=10000.0,
-            step=1000.0,
-            help="พื้นที่โครงการจะใช้ร่วมกันทุกทางเลือก"
+            step=1000.0
         )
-        
-        if st.button("📏 ใช้พื้นที่นี้กับทุกทางเลือก", use_container_width=True):
-            for ท in st.session_state.ทางเลือกทั้งหมด:
-                ท.พื้นที่ = พื้นที่ร่วม
-            st.success(f"✅ อัปเดตพื้นที่เป็น {พื้นที่ร่วม:,.0f} ตร.ม. แล้ว")
-            st.rerun()
         
         st.divider()
         
-        st.subheader("📊 การวิเคราะห์ความไว")
-        ช่วงอัตราคิดลด = st.slider(
-            "ช่วงการเปลี่ยนแปลงอัตราคิดลด (±%)",
-            min_value=1.0, max_value=4.0, value=2.0, step=0.5
+        # พารามิเตอร์การวิเคราะห์
+        st.subheader("📊 พารามิเตอร์การวิเคราะห์")
+        
+        ระยะวิเคราะห์ = st.slider(
+            "ระยะเวลาวิเคราะห์ (ปี):",
+            min_value=10,
+            max_value=50,
+            value=30,
+            step=5
+        )
+        
+        อัตราคิดลด = st.slider(
+            "อัตราคิดลด (%):",
+            min_value=0.0,
+            max_value=10.0,
+            value=3.0,
+            step=0.5
         ) / 100.0
         
         st.divider()
         
-        # JSON Import
-        st.subheader("💾 บันทึก/โหลดข้อมูล")
-        uploaded_file = st.file_uploader(
-            "โหลดข้อมูลจาก JSON",
-            type=['json'],
-            help="อัปโหลดไฟล์ JSON ที่บันทึกไว้"
+        # Toggle มูลค่าซาก
+        st.subheader("💰 มูลค่าซาก (Salvage Value)")
+        
+        รวมมูลค่าซาก = st.toggle(
+            "รวมมูลค่าซากในการคำนวณ",
+            value=True,
+            help="เปิดใช้งานเพื่อนำมูลค่าซากมาหักออกจากต้นทุนทั้งหมด"
         )
         
+        if รวมมูลค่าซาก:
+            st.info("✅ กำลังคำนวณมูลค่าซาก")
+        else:
+            st.warning("⚠️ ไม่คำนวณมูลค่าซาก")
+        
+        st.divider()
+        
+        # Excel Upload Section
+        st.subheader("📤 อัปโหลดข้อมูลต้นทุน")
+        
+        # ดาวน์โหลด Template
+        template_file = สร้าง_excel_template()
+        st.download_button(
+            label="📥 ดาวน์โหลด Template Excel",
+            data=template_file,
+            file_name="LCCA_Template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.document",
+            use_container_width=True
+        )
+        
+        st.caption("💡 ดาวน์โหลด template → กรอกข้อมูล → อัปโหลดกลับมา")
+        
+        # Upload File
+        uploaded_file = st.file_uploader(
+            "เลือกไฟล์ Excel:",
+            type=['xlsx', 'xls'],
+            help="อัปโหลดไฟล์ Excel ที่กรอกข้อมูลแล้ว"
+        )
+        
+        # Process uploaded file
         if uploaded_file is not None:
             try:
-                data = json.load(uploaded_file)
-                st.session_state.ทางเลือกทั้งหมด = [dict_เป็น_ทางเลือก(d) for d in data['ทางเลือก']]
-                if 'ชื่อโครงการ' in data:
-                    st.session_state.ชื่อโครงการ = data['ชื่อโครงการ']
-                st.success(f"✅ โหลดข้อมูลสำเร็จ!")
-                st.rerun()
+                # อ่านข้อมูล
+                ข้อมูลต้นทุน = อ่านข้อมูลจาก_excel(uploaded_file)
+                
+                if len(ข้อมูลต้นทุน) > 0:
+                    # สร้าง version hash
+                    file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()[:8]
+                    
+                    # บันทึกลง session_state
+                    st.session_state['uploaded_cost_data'] = ข้อมูลต้นทุน
+                    st.session_state['upload_version'] = file_hash
+                    
+                    st.success(f"✅ อ่านข้อมูลสำเร็จ! ({len(ข้อมูลต้นทุน)} รายการ)")
+                    
+                    # แสดงข้อมูลที่อ่านได้
+                    with st.expander("👀 ดูข้อมูลที่อัปโหลด"):
+                        for ชื่อ, ต้นทุน in ข้อมูลต้นทุน.items():
+                            st.write(f"• {ชื่อ}: {ต้นทุน:,.0f} บาท/ตร.ม.")
+                else:
+                    st.error("❌ ไม่พบข้อมูลที่ถูกต้องในไฟล์")
+            
             except Exception as e:
-                st.error(f"❌ ข้อผิดพลาด: {e}")
+                st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
         
-        # Reset button
-        if st.button("🔄 รีเซ็ตเป็นค่าเริ่มต้น", use_container_width=True):
-            st.session_state.ทางเลือกทั้งหมด = สร้างทางเลือกเริ่มต้น()
-            st.success("✅ รีเซ็ตข้อมูลแล้ว")
-            st.rerun()
+        st.divider()
+        
+        # ช่วงการวิเคราะห์ความไว
+        st.subheader("📈 การวิเคราะห์ความไว")
+        col1, col2 = st.columns(2)
+        with col1:
+            อัตราต่ำสุด = st.number_input("อัตราต่ำสุด (%):", value=1.0, step=0.5) / 100.0
+        with col2:
+            อัตราสูงสุด = st.number_input("อัตราสูงสุด (%):", value=8.0, step=0.5) / 100.0
+        
+        ช่วงอัตราคิดลด = (อัตราต่ำสุด, อัตราสูงสุด)
     
     # ==========================================================================
-    # แท็บหลัก
+    # Main Content: จัดการทางเลือก
     # ==========================================================================
+    
+    # Initialize session state
+    if 'ทางเลือกทั้งหมด' not in st.session_state:
+        # ค่าเริ่มต้น
+        st.session_state.ทางเลือกทั้งหมด = [
+            ทางเลือกผิวทาง(
+                ชื่อ="AC",
+                ประเภท="Flexible (แอสฟัลต์)",
+                ต้นทุนก่อสร้าง=800.0,
+                แผนบำรุงรักษา=[
+                    กิจกรรมบำรุงรักษา("Crack Sealing", 50.0, 0, 3),
+                    กิจกรรมบำรุงรักษา("Surface Treatment", 150.0, 0, 5)
+                ],
+                แผนฟื้นฟูสภาพ=[
+                    กิจกรรมฟื้นฟูสภาพ("Overlay (5 cm)", 400.0, 12),
+                    กิจกรรมฟื้นฟูสภาพ("Overlay (5 cm)", 400.0, 24)
+                ],
+                พื้นที่=พื้นที่โครงการ,
+                ความหนา=10.0
+            ),
+            ทางเลือกผิวทาง(
+                ชื่อ="JPCP",
+                ประเภท="Rigid (คอนกรีตธรรมดา)",
+                ต้นทุนก่อสร้าง=1200.0,
+                แผนบำรุงรักษา=[
+                    กิจกรรมบำรุงรักษา("Joint Sealing", 30.0, 0, 5),
+                    กิจกรรมบำรุงรักษา("Slab Repair", 100.0, 0, 10)
+                ],
+                แผนฟื้นฟูสภาพ=[
+                    กิจกรรมฟื้นฟูสภาพ("Diamond Grinding", 150.0, 15)
+                ],
+                พื้นที่=พื้นที่โครงการ,
+                ความหนา=25.0
+            ),
+            ทางเลือกผิวทาง(
+                ชื่อ="JRCP",
+                ประเภท="Rigid (คอนกรีตเสริมเหล็ก)",
+                ต้นทุนก่อสร้าง=1400.0,
+                แผนบำรุงรักษา=[
+                    กิจกรรมบำรุงรักษา("Joint Sealing", 30.0, 0, 5),
+                    กิจกรรมบำรุงรักษา("Partial Repair", 80.0, 0, 12)
+                ],
+                แผนฟื้นฟูสภาพ=[
+                    กิจกรรมฟื้นฟูสภาพ("Diamond Grinding", 150.0, 18)
+                ],
+                พื้นที่=พื้นที่โครงการ,
+                ความหนา=28.0
+            ),
+            ทางเลือกผิวทาง(
+                ชื่อ="CRCP",
+                ประเภท="Rigid (คอนกรีตต่อเนื่อง)",
+                ต้นทุนก่อสร้าง=1600.0,
+                แผนบำรุงรักษา=[
+                    กิจกรรมบำรุงรักษา("Surface Cleaning", 20.0, 0, 5),
+                    กิจกรรมบำรุงรักษา("Minor Repair", 60.0, 0, 15)
+                ],
+                แผนฟื้นฟูสภาพ=[
+                    กิจกรรมฟื้นฟูสภาพ("Diamond Grinding", 150.0, 20)
+                ],
+                พื้นที่=พื้นที่โครงการ,
+                ความหนา=30.0
+            )
+        ]
+    
+    # อัพเดทพื้นที่ทุกทางเลือก
+    for ทางเลือก in st.session_state.ทางเลือกทั้งหมด:
+        ทางเลือก.พื้นที่ = พื้นที่โครงการ
+    
+    # Get upload version for dynamic keys
+    upload_version = st.session_state.get('upload_version', 'default')
+    uploaded_cost = st.session_state.get('uploaded_cost_data', {})
+    
+    # ==========================================================================
+    # Tabs
+    # ==========================================================================
+    
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📝 ข้อมูลทางเลือก",
+        "🏗️ จัดการทางเลือก",
         "📊 ผลการวิเคราะห์",
         "💰 กระแสเงินสด",
-        "📈 วิเคราะห์ความไว",
+        "📈 การวิเคราะห์ความไว",
         "ℹ️ ทฤษฎี LCCA"
     ])
     
     # ==========================================================================
-    # แท็บ 1: แก้ไขข้อมูลทางเลือก
+    # แท็บ 1: จัดการทางเลือก
     # ==========================================================================
     with tab1:
-        st.header("📝 ข้อมูลทางเลือกผิวทาง")
+        st.header("🏗️ จัดการทางเลือกผิวทาง")
         
-        st.info("""
-        💡 **คำแนะนำ:** 
-        - กำหนดต้นทุนก่อสร้าง ความหนา และพื้นที่ได้ในแต่ละทางเลือก
-        - เปิด/ปิดทางเลือกที่ต้องการเปรียบเทียบ
-        - กำหนดแผนบำรุงรักษาและฟื้นฟูสภาพได้
-        """)
+        # เลือกทางเลือกที่จะแก้ไข
+        ชื่อทางเลือกทั้งหมด = [ท.ชื่อ for ท in st.session_state.ทางเลือกทั้งหมด]
         
-        # แสดงข้อมูลแต่ละทางเลือก
-        for i, ทางเลือก in enumerate(st.session_state.ทางเลือกทั้งหมด):
-            with st.expander(f"{'✅' if ทางเลือก.เปิดใช้งาน else '❌'} ทางเลือกที่ {i+1}: {ทางเลือก.ชื่อ}", expanded=(i==0)):
-                
-                # แถวบนสุด: เปิด/ปิดใช้งาน
-                col_enable = st.columns([3, 1])
-                with col_enable[1]:
-                    เปิดใช้ = st.checkbox(
-                        "เปิดใช้งาน",
-                        value=ทางเลือก.เปิดใช้งาน,
-                        key=f"enable_{i}"
-                    )
-                    ทางเลือก.เปิดใช้งาน = เปิดใช้
-                
-                st.markdown("---")
-                
-                # ข้อมูลหลัก
-                st.subheader("🏗️ ข้อมูลหลัก")
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    ชื่อใหม่ = st.text_input(
-                        "ชื่อทางเลือก",
-                        value=ทางเลือก.ชื่อ,
-                        key=f"name_{i}"
-                    )
-                    ทางเลือก.ชื่อ = ชื่อใหม่
-                
-                with col2:
-                    ประเภทใหม่ = st.selectbox(
-                        "ประเภทผิวทาง",
-                        options=["Flexible", "JPCP", "JRCP", "CRCP"],
-                        index=["Flexible", "JPCP", "JRCP", "CRCP"].index(ทางเลือก.ประเภท) if ทางเลือก.ประเภท in ["Flexible", "JPCP", "JRCP", "CRCP"] else 0,
-                        key=f"type_{i}"
-                    )
-                    ทางเลือก.ประเภท = ประเภทใหม่
-                
-                with col3:
-                    # ตรวจสอบว่ามี attribute ความหนาหรือไม่ (สำหรับข้อมูลเก่า)
-                    ความหนาปัจจุบัน = getattr(ทางเลือก, 'ความหนา', 0.0)
-                    if ความหนาปัจจุบัน == 0.0:
-                        # กำหนดค่าเริ่มต้นตามประเภท
-                        if 'Flexible' in ทางเลือก.ประเภท:
-                            ความหนาปัจจุบัน = 15.0
-                        elif 'JPCP' in ทางเลือก.ประเภท:
-                            ความหนาปัจจุบัน = 30.0
-                        elif 'JRCP' in ทางเลือก.ประเภท:
-                            ความหนาปัจจุบัน = 25.0
-                        elif 'CRCP' in ทางเลือก.ประเภท:
-                            ความหนาปัจจุบัน = 25.0
-                    
-                    ความหนาใหม่ = st.number_input(
-                        "ความหนา (ซม.)",
-                        min_value=0.0,
-                        max_value=100.0,
-                        value=float(ความหนาปัจจุบัน),
-                        step=1.0,
-                        key=f"thickness_{i}"
-                    )
-                    ทางเลือก.ความหนา = ความหนาใหม่
-                
-                col4, col5, col6 = st.columns(3)
-                
-                with col4:
-                    ต้นทุนใหม่ = st.number_input(
-                        "ต้นทุนก่อสร้าง (บาท/ตร.ม.)",
-                        min_value=0.0,
-                        max_value=10000.0,
-                        value=float(ทางเลือก.ต้นทุนก่อสร้าง),
-                        step=100.0,
-                        key=f"cost_{i}"
-                    )
-                    ทางเลือก.ต้นทุนก่อสร้าง = ต้นทุนใหม่
-                
-                with col5:
-                    พื้นที่ใหม่ = st.number_input(
-                        "พื้นที่ (ตร.ม.)",
-                        min_value=100.0,
-                        max_value=1000000.0,
-                        value=float(ทางเลือก.พื้นที่),
-                        step=1000.0,
-                        key=f"area_{i}"
-                    )
-                    ทางเลือก.พื้นที่ = พื้นที่ใหม่
-                
-                with col6:
-                    ซากใหม่ = st.number_input(
-                        "ร้อยละมูลค่าซาก (%)",
-                        min_value=0.0,
-                        max_value=50.0,
-                        value=float(ทางเลือก.ร้อยละมูลค่าซาก),
-                        step=5.0,
-                        key=f"salvage_{i}"
-                    )
-                    ทางเลือก.ร้อยละมูลค่าซาก = ซากใหม่
-                
-                # แสดงต้นทุนก่อสร้างรวม
-                st.metric(
-                    "💰 ต้นทุนก่อสร้างรวม",
-                    f"{ทางเลือก.ต้นทุนก่อสร้าง * ทางเลือก.พื้นที่:,.0f} บาท"
-                )
-                
-                st.markdown("---")
-                
-                # แผนบำรุงรักษา
-                st.subheader("🔧 แผนบำรุงรักษา")
-                
-                # หัวข้อคอลัมน์
-                col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([3, 2, 1, 1, 0.5])
-                with col_h1:
-                    st.markdown("**กิจกรรม**")
-                with col_h2:
-                    st.markdown("**ต้นทุน (บาท/ตร.ม.)**")
-                with col_h3:
-                    st.markdown("**ปีเริ่มต้น**")
-                with col_h4:
-                    st.markdown("**ทุกๆ (ปี)**")
-                with col_h5:
-                    st.markdown("**ลบ**")
-                
-                รายการที่จะลบ_maint = []
-                for j, บำรุง in enumerate(ทางเลือก.แผนบำรุงรักษา):
-                    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns([3, 2, 1, 1, 0.5])
-                    
-                    with col_m1:
-                        บำรุง.ชื่อกิจกรรม = st.text_input(
-                            "กิจกรรม",
-                            value=บำรุง.ชื่อกิจกรรม,
-                            key=f"maint_name_{i}_{j}",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col_m2:
-                        บำรุง.ต้นทุนต่อหน่วย = st.number_input(
-                            "บาท/ตร.ม.",
-                            min_value=0.0,
-                            value=float(บำรุง.ต้นทุนต่อหน่วย),
-                            step=5.0,
-                            key=f"maint_cost_{i}_{j}",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col_m3:
-                        บำรุง.ปีเริ่มต้น = st.number_input(
-                            "ปีเริ่ม",
-                            min_value=1,
-                            max_value=50,
-                            value=int(บำรุง.ปีเริ่มต้น),
-                            key=f"maint_year_{i}_{j}",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col_m4:
-                        บำรุง.ความถี่ = st.number_input(
-                            "ทุกๆ (ปี)",
-                            min_value=0,
-                            max_value=20,
-                            value=int(บำรุง.ความถี่),
-                            key=f"maint_freq_{i}_{j}",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col_m5:
-                        if st.button("🗑️", key=f"del_maint_{i}_{j}", help="ลบรายการนี้"):
-                            รายการที่จะลบ_maint.append(j)
-                
-                # ลบรายการที่เลือก
-                for idx in sorted(รายการที่จะลบ_maint, reverse=True):
-                    if len(ทางเลือก.แผนบำรุงรักษา) > 1:
-                        ทางเลือก.แผนบำรุงรักษา.pop(idx)
-                        st.rerun()
-                
-                # ปุ่มเพิ่มรายการบำรุงรักษา
-                if st.button(f"➕ เพิ่มกิจกรรมบำรุงรักษา", key=f"add_maint_{i}"):
-                    ทางเลือก.แผนบำรุงรักษา.append(
-                        กิจกรรมบำรุงรักษา("กิจกรรมใหม่", 50.0, ปีเริ่มต้น=5, ความถี่=5)
-                    )
-                    st.rerun()
-                
-                st.markdown("---")
-                
-                # แผนฟื้นฟูสภาพ
-                st.subheader("🏗️ แผนฟื้นฟูสภาพ")
-                
-                # หัวข้อคอลัมน์
-                col_rh1, col_rh2, col_rh3, col_rh4 = st.columns([4, 2, 1, 0.5])
-                with col_rh1:
-                    st.markdown("**กิจกรรม**")
-                with col_rh2:
-                    st.markdown("**ต้นทุน (บาท/ตร.ม.)**")
-                with col_rh3:
-                    st.markdown("**ปีที่ดำเนินการ**")
-                with col_rh4:
-                    st.markdown("**ลบ**")
-                
-                # แสดงรายการฟื้นฟูสภาพ
-                รายการที่จะลบ_rehab = []
-                for k, ฟื้นฟู in enumerate(ทางเลือก.แผนฟื้นฟูสภาพ):
-                    col_r1, col_r2, col_r3, col_r4 = st.columns([4, 2, 1, 0.5])
-                    
-                    with col_r1:
-                        ฟื้นฟู.ชื่อกิจกรรม = st.text_input(
-                            "กิจกรรม",
-                            value=ฟื้นฟู.ชื่อกิจกรรม,
-                            key=f"rehab_name_{i}_{k}",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col_r2:
-                        ฟื้นฟู.ต้นทุนต่อหน่วย = st.number_input(
-                            "บาท/ตร.ม.",
-                            min_value=0.0,
-                            value=float(ฟื้นฟู.ต้นทุนต่อหน่วย),
-                            step=10.0,
-                            key=f"rehab_cost_{i}_{k}",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col_r3:
-                        ฟื้นฟู.ปีดำเนินการ = st.number_input(
-                            "ปีที่",
-                            min_value=1,
-                            max_value=50,
-                            value=int(ฟื้นฟู.ปีดำเนินการ),
-                            key=f"rehab_year_{i}_{k}",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col_r4:
-                        if st.button("🗑️", key=f"del_rehab_{i}_{k}", help="ลบรายการนี้"):
-                            รายการที่จะลบ_rehab.append(k)
-                
-                # ลบรายการที่เลือก
-                for idx in sorted(รายการที่จะลบ_rehab, reverse=True):
-                    if len(ทางเลือก.แผนฟื้นฟูสภาพ) > 1:
-                        ทางเลือก.แผนฟื้นฟูสภาพ.pop(idx)
-                        st.rerun()
-                
-                # ปุ่มเพิ่มรายการฟื้นฟูสภาพ
-                if st.button(f"➕ เพิ่มกิจกรรมฟื้นฟูสภาพ", key=f"add_rehab_{i}"):
-                    # หาปีถัดไปที่เหมาะสม
-                    ปีล่าสุด = max([ฟ.ปีดำเนินการ for ฟ in ทางเลือก.แผนฟื้นฟูสภาพ]) if ทางเลือก.แผนฟื้นฟูสภาพ else 10
-                    ทางเลือก.แผนฟื้นฟูสภาพ.append(
-                        กิจกรรมฟื้นฟูสภาพ("Overlay AC 50 มม.", 450.0, ปีดำเนินการ=ปีล่าสุด + 9)
-                    )
-                    st.rerun()
+        ทางเลือกที่เลือก_idx = st.selectbox(
+            "เลือกทางเลือกที่ต้องการแก้ไข:",
+            options=range(len(st.session_state.ทางเลือกทั้งหมด)),
+            format_func=lambda x: st.session_state.ทางเลือกทั้งหมด[x].ชื่อ
+        )
+        
+        ทางเลือก = st.session_state.ทางเลือกทั้งหมด[ทางเลือกที่เลือก_idx]
         
         st.divider()
         
-        # ปุ่มบันทึก JSON
-        col_save1, col_save2 = st.columns(2)
+        # แก้ไขข้อมูลพื้นฐาน
+        col1, col2 = st.columns(2)
         
-        with col_save1:
-            if st.button("💾 สร้างไฟล์ JSON", use_container_width=True):
-                data_export = {
-                    'ชื่อโครงการ': st.session_state.ชื่อโครงการ,
-                    'ระยะวิเคราะห์': ระยะวิเคราะห์,
-                    'อัตราคิดลด': อัตราคิดลด,
-                    'ทางเลือก': [ทางเลือก_เป็น_dict(ท) for ท in st.session_state.ทางเลือกทั้งหมด]
-                }
-                json_str = json.dumps(data_export, ensure_ascii=False, indent=2)
-                st.download_button(
-                    label="⬇️ ดาวน์โหลดไฟล์ JSON",
-                    data=json_str,
-                    file_name="lcca_data_v2.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
+        with col1:
+            # ถ้ามีข้อมูล upload ให้ใช้ข้อมูลนั้น
+            ต้นทุนเริ่มต้น = uploaded_cost.get(ทางเลือก.ชื่อ, ทางเลือก.ต้นทุนก่อสร้าง)
+            
+            ทางเลือก.ต้นทุนก่อสร้าง = st.number_input(
+                "ต้นทุนก่อสร้าง (บาท/ตร.ม.):",
+                min_value=0.0,
+                max_value=10000.0,
+                value=float(ต้นทุนเริ่มต้น),
+                step=50.0,
+                key=f"cost_{ทางเลือก.ชื่อ}_{upload_version}"  # Dynamic key
+            )
+            
+            ทางเลือก.ความหนา = st.number_input(
+                "ความหนาผิวทาง (ซม.):",
+                min_value=0.0,
+                max_value=50.0,
+                value=float(ทางเลือก.ความหนา),
+                step=1.0,
+                key=f"thick_{ทางเลือก.ชื่อ}_{upload_version}"
+            )
         
-        # สรุปทางเลือกที่เปิดใช้งาน
-        ทางเลือกที่ใช้ = [ท for ท in st.session_state.ทางเลือกทั้งหมด if ท.เปิดใช้งาน]
-        st.info(f"📋 ทางเลือกที่เปิดใช้งาน: **{len(ทางเลือกที่ใช้)}** จาก {len(st.session_state.ทางเลือกทั้งหมด)} ทางเลือก")
+        with col2:
+            ทางเลือก.ร้อยละมูลค่าซาก = st.number_input(
+                "ร้อยละมูลค่าซาก (%):",
+                min_value=0.0,
+                max_value=50.0,
+                value=float(ทางเลือก.ร้อยละมูลค่าซาก),
+                step=5.0,
+                key=f"salvage_{ทางเลือก.ชื่อ}_{upload_version}"
+            )
+            
+            ทางเลือก.เปิดใช้งาน = st.checkbox(
+                "เปิดใช้งานทางเลือกนี้",
+                value=ทางเลือก.เปิดใช้งาน,
+                key=f"enable_{ทางเลือก.ชื่อ}_{upload_version}"
+            )
+        
+        st.divider()
+        
+        # แสดงข้อมูลสรุป
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("ต้นทุนก่อสร้างรวม", f"{ทางเลือก.ต้นทุนก่อสร้าง * พื้นที่โครงการ:,.0f} บาท")
+        with col2:
+            st.metric("จำนวนกิจกรรมบำรุงรักษา", len(ทางเลือก.แผนบำรุงรักษา))
+        with col3:
+            st.metric("จำนวนกิจกรรมฟื้นฟู", len(ทางเลือก.แผนฟื้นฟูสภาพ))
+        
+        st.divider()
+        
+        # แสดงแผนบำรุงรักษาและฟื้นฟู
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🔧 แผนบำรุงรักษา")
+            if len(ทางเลือก.แผนบำรุงรักษา) > 0:
+                for บำรุง in ทางเลือก.แผนบำรุงรักษา:
+                    with st.expander(f"📌 {บำรุง.ชื่อกิจกรรม}"):
+                        st.write(f"**ต้นทุน:** {บำรุง.ต้นทุนต่อหน่วย:,.0f} บาท/ตร.ม.")
+                        st.write(f"**ความถี่:** ทุก {บำรุง.ความถี่} ปี")
+            else:
+                st.info("ไม่มีกิจกรรมบำรุงรักษา")
+        
+        with col2:
+            st.subheader("🔄 แผนฟื้นฟูสภาพ")
+            if len(ทางเลือก.แผนฟื้นฟูสภาพ) > 0:
+                for ฟื้นฟู in ทางเลือก.แผนฟื้นฟูสภาพ:
+                    with st.expander(f"📌 {ฟื้นฟู.ชื่อกิจกรรม}"):
+                        st.write(f"**ต้นทุน:** {ฟื้นฟู.ต้นทุนต่อหน่วย:,.0f} บาท/ตร.ม.")
+                        st.write(f"**ปีที่ดำเนินการ:** ปีที่ {ฟื้นฟู.ปีดำเนินการ}")
+            else:
+                st.info("ไม่มีกิจกรรมฟื้นฟูสภาพ")
     
     # ==========================================================================
     # แท็บ 2: ผลการวิเคราะห์
@@ -1113,135 +866,126 @@ def main():
     with tab2:
         st.header("📊 ผลการวิเคราะห์ LCCA")
         
-        # แสดงชื่อโครงการ
-        st.subheader(f"📋 โครงการ: {st.session_state.ชื่อโครงการ}")
-        
-        # แสดงพารามิเตอร์
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.info(f"📅 ระยะวิเคราะห์: **{ระยะวิเคราะห์} ปี**")
-        with col2:
-            st.info(f"📉 อัตราคิดลด: **{อัตราคิดลด*100:.1f}%**")
-        with col3:
-            ทางเลือกที่ใช้ = [ท for ท in st.session_state.ทางเลือกทั้งหมด if ท.เปิดใช้งาน]
-            st.info(f"🛣️ ทางเลือกที่วิเคราะห์: **{len(ทางเลือกที่ใช้)}**")
+        ทางเลือกที่ใช้ = [ท for ท in st.session_state.ทางเลือกทั้งหมด if ท.เปิดใช้งาน]
         
         if len(ทางเลือกที่ใช้) == 0:
-            st.warning("⚠️ กรุณาเปิดใช้งานอย่างน้อย 1 ทางเลือกในแท็บ 'แก้ไขข้อมูล'")
+            st.warning("⚠️ กรุณาเปิดใช้งานอย่างน้อย 1 ทางเลือก")
         else:
-            # ดำเนินการวิเคราะห์
-            สรุป, กระแสเงินสด = วิเคราะห์_LCCA(st.session_state.ทางเลือกทั้งหมด, ระยะวิเคราะห์, อัตราคิดลด)
-            
-            st.subheader("🏆 ตารางเปรียบเทียบ")
-            
-            # จัดรูปแบบตาราง
-            สรุป_display = สรุป[['ลำดับ', 'ทางเลือก', 'ประเภทผิวทาง', 'ความหนา_ซม', 'พื้นที่_ตรม', 
-                                'ต้นทุนก่อสร้าง_ตรม', 'มูลค่าปัจจุบันรวม', 
-                                'ต้นทุนเฉลี่ยรายปี', 'ต้นทุนต่อตรม_ต่อปี']].copy()
-            สรุป_display.columns = ['ลำดับ', 'ทางเลือก', 'ประเภท', 'ความหนา (ซม.)', 'พื้นที่ (ตร.ม.)',
-                                   'ก่อสร้าง (บาท/ตร.ม.)', 'มูลค่าปัจจุบัน (บาท)', 
-                                   'EAC (บาท/ปี)', 'ต้นทุน (บาท/ตร.ม./ปี)']
-            
-            def highlight_best(row):
-                if row['ลำดับ'] == 1:
-                    return ['background-color: #90EE90'] * len(row)
-                return [''] * len(row)
-            
-            st.dataframe(
-                สรุป_display.style.apply(highlight_best, axis=1).format({
-                    'ความหนา (ซม.)': '{:,.1f}',
-                    'พื้นที่ (ตร.ม.)': '{:,.0f}',
-                    'ก่อสร้าง (บาท/ตร.ม.)': '{:,.0f}',
-                    'มูลค่าปัจจุบัน (บาท)': '{:,.0f}',
-                    'EAC (บาท/ปี)': '{:,.0f}',
-                    'ต้นทุน (บาท/ตร.ม./ปี)': '{:,.2f}'
-                }),
-                use_container_width=True,
-                hide_index=True
+            # วิเคราะห์
+            สรุป, กระแสเงินสด = วิเคราะห์_LCCA(
+                st.session_state.ทางเลือกทั้งหมด,
+                ระยะวิเคราะห์,
+                อัตราคิดลด,
+                รวมมูลค่าซาก
             )
             
-            # แสดงผู้ชนะ
-            ผู้ชนะ = สรุป.iloc[0]
-            st.success(f"""
-            ### ⭐ ทางเลือกที่ประหยัดที่สุด: **{ผู้ชนะ['ทางเลือก']}**
-            - มูลค่าปัจจุบันรวม: **{ผู้ชนะ['มูลค่าปัจจุบันรวม']:,.0f} บาท**
-            - ต้นทุนเฉลี่ยรายปี: **{ผู้ชนะ['ต้นทุนเฉลี่ยรายปี']:,.0f} บาท/ปี**
-            - ต้นทุนต่อตารางเมตรต่อปี: **{ผู้ชนะ['ต้นทุนต่อตรม_ต่อปี']:,.2f} บาท/ตร.ม./ปี**
-            """)
+            # หาทางเลือกที่ดีที่สุด
+            ทางเลือกที่ดีที่สุด = สรุป.loc[สรุป['มูลค่าปัจจุบันรวม (PW)'].idxmin()]
             
-            # เปรียบเทียบกับทางเลือกอื่น
-            if len(สรุป) > 1:
-                st.subheader("💡 การเปรียบเทียบกับทางเลือกอื่น")
-                for idx in range(1, len(สรุป)):
-                    อื่น = สรุป.iloc[idx]
-                    ส่วนต่าง = อื่น['มูลค่าปัจจุบันรวม'] - ผู้ชนะ['มูลค่าปัจจุบันรวม']
-                    ร้อยละ = (ส่วนต่าง / อื่น['มูลค่าปัจจุบันรวม']) * 100
-                    st.info(f"📊 vs {อื่น['ทางเลือก']}: ประหยัด **{ส่วนต่าง:,.0f} บาท** ({ร้อยละ:.1f}%)")
+            # แสดงผลแบบเด่น
+            st.success(f"""
+            ### 🏆 ทางเลือกที่ดีที่สุด: **{ทางเลือกที่ดีที่สุด['ทางเลือก']}**
+            - มูลค่าปัจจุบันรวม: **{ทางเลือกที่ดีที่สุด['มูลค่าปัจจุบันรวม (PW)']:,.0f}** บาท
+            - ต้นทุนเฉลี่ยรายปี: **{ทางเลือกที่ดีที่สุด['ต้นทุนเฉลี่ยรายปี (EAC)']:,.0f}** บาท/ปี
+            """)
             
             st.divider()
             
-            # กราฟแท่งเปรียบเทียบ
-            st.subheader("📊 กราฟเปรียบเทียบองค์ประกอบต้นทุน")
+            # Metrics
+            col1, col2, col3, col4 = st.columns(4)
             
-            fig_bar = go.Figure()
+            for idx, (_, row) in enumerate(สรุป.iterrows()):
+                with [col1, col2, col3, col4][idx % 4]:
+                    delta = None
+                    if idx > 0:
+                        ผลต่างจากที่ดีที่สุด = row['มูลค่าปัจจุบันรวม (PW)'] - ทางเลือกที่ดีที่สุด['มูลค่าปัจจุบันรวม (PW)']
+                        delta = f"+{ผลต่างจากที่ดีที่สุด:,.0f}"
+                    
+                    st.metric(
+                        label=f"{row['ทางเลือก']}",
+                        value=f"{row['มูลค่าปัจจุบันรวม (PW)']:,.0f} บาท",
+                        delta=delta,
+                        delta_color="inverse"
+                    )
             
-            สีองค์ประกอบ = {
-                'PW_ก่อสร้าง': ('#1f77b4', 'ก่อสร้างเริ่มต้น'),
-                'PW_บำรุงรักษา': ('#ff7f0e', 'บำรุงรักษา'),
-                'PW_ฟื้นฟูสภาพ': ('#2ca02c', 'ฟื้นฟูสภาพ')
-            }
+            st.divider()
             
-            for องค์ประกอบ, (สี, ชื่อ) in สีองค์ประกอบ.items():
-                fig_bar.add_trace(go.Bar(
-                    name=ชื่อ,
+            # ตารางสรุป
+            st.subheader("📋 ตารางสรุปผลการวิเคราะห์")
+            
+            สรุป_display = สรุป.copy()
+            for col in สรุป_display.columns[2:]:
+                สรุป_display[col] = สรุป_display[col].apply(lambda x: f"{x:,.0f}")
+            
+            st.dataframe(สรุป_display, use_container_width=True, hide_index=True)
+            
+            st.divider()
+            
+            # กราฟเปรียบเทียบ
+            st.subheader("📊 กราฟเปรียบเทียบต้นทุน")
+            
+            # กราฟแท่ง - แยกตามประเภทต้นทุน
+            fig_breakdown = go.Figure()
+            
+            categories = ['ก่อสร้าง', 'บำรุงรักษา', 'ฟื้นฟู', 'มูลค่าซาก']
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+            
+            for idx, cat in enumerate(categories):
+                col_name = f'ต้นทุน{cat} (PW)' if cat != 'มูลค่าซาก' else 'มูลค่าซาก (PW)'
+                fig_breakdown.add_trace(go.Bar(
+                    name=cat,
                     x=สรุป['ทางเลือก'],
-                    y=สรุป[องค์ประกอบ],
-                    marker_color=สี
+                    y=สรุป[col_name],
+                    marker_color=colors[idx]
                 ))
             
-            fig_bar.update_layout(
-                barmode='stack',
-                title='องค์ประกอบต้นทุน (มูลค่าปัจจุบัน)',
+            fig_breakdown.update_layout(
+                title='การแยกประเภทต้นทุนตามมูลค่าปัจจุบัน',
+                xaxis_title='ทางเลือก',
                 yaxis_title='มูลค่าปัจจุบัน (บาท)',
-                xaxis_title='ทางเลือกผิวทาง',
-                legend_title='องค์ประกอบ',
+                barmode='relative',
                 height=500
             )
             
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_breakdown, use_container_width=True)
             
-            # กราฟวงกลม
-            st.subheader("🥧 สัดส่วนต้นทุนแต่ละทางเลือก")
+            # กราฟวงกลม - สัดส่วนต้นทุน
+            col1, col2 = st.columns(2)
             
-            cols = st.columns(min(len(สรุป), 4))
-            for idx, (_, row) in enumerate(สรุป.iterrows()):
-                with cols[idx % len(cols)]:
-                    ข้อมูลวงกลม = {
-                        'องค์ประกอบ': ['ก่อสร้าง', 'บำรุงรักษา', 'ฟื้นฟูสภาพ'],
-                        'มูลค่า': [row['PW_ก่อสร้าง'], row['PW_บำรุงรักษา'], row['PW_ฟื้นฟูสภาพ']]
-                    }
-                    fig_pie = px.pie(
-                        ข้อมูลวงกลม, 
-                        values='มูลค่า', 
-                        names='องค์ประกอบ',
-                        title=row['ทางเลือก'],
-                        color_discrete_sequence=px.colors.qualitative.Set2
-                    )
-                    fig_pie.update_layout(height=350)
-                    st.plotly_chart(fig_pie, use_container_width=True)
+            with col1:
+                fig_pie_pw = px.pie(
+                    สรุป,
+                    values='มูลค่าปัจจุบันรวม (PW)',
+                    names='ทางเลือก',
+                    title='สัดส่วนมูลค่าปัจจุบัน'
+                )
+                st.plotly_chart(fig_pie_pw, use_container_width=True)
             
-            # ปุ่มส่งออกรายงาน
+            with col2:
+                fig_pie_eac = px.pie(
+                    สรุป,
+                    values='ต้นทุนเฉลี่ยรายปี (EAC)',
+                    names='ทางเลือก',
+                    title='สัดส่วนต้นทุนเฉลี่ยรายปี'
+                )
+                st.plotly_chart(fig_pie_eac, use_container_width=True)
+            
             st.divider()
-            st.subheader("📄 ส่งออกรายงาน")
+            
+            # ส่งออกรายงาน
+            st.subheader("📥 ส่งออกรายงาน")
             
             col_export1, col_export2 = st.columns(2)
             
             with col_export1:
                 if DOCX_AVAILABLE:
-                    word_file = สร้างรายงาน_Word(
-                        สรุป, กระแสเงินสด, ระยะวิเคราะห์, อัตราคิดลด,
-                        st.session_state.ทางเลือกทั้งหมด,
-                        st.session_state.ชื่อโครงการ
+                    word_file = สร้างรายงาน_word(
+                        ชื่อโครงการ,
+                        สรุป,
+                        กระแสเงินสด,
+                        ระยะวิเคราะห์,
+                        อัตราคิดลด,
+                        รวมมูลค่าซาก
                     )
                     st.download_button(
                         label="📝 ดาวน์โหลดรายงาน Word",
@@ -1274,7 +1018,12 @@ def main():
         if len(ทางเลือกที่ใช้) == 0:
             st.warning("⚠️ กรุณาเปิดใช้งานอย่างน้อย 1 ทางเลือก")
         else:
-            สรุป, กระแสเงินสด = วิเคราะห์_LCCA(st.session_state.ทางเลือกทั้งหมด, ระยะวิเคราะห์, อัตราคิดลด)
+            สรุป, กระแสเงินสด = วิเคราะห์_LCCA(
+                st.session_state.ทางเลือกทั้งหมด,
+                ระยะวิเคราะห์,
+                อัตราคิดลด,
+                รวมมูลค่าซาก
+            )
             
             ทางเลือกที่เลือก = st.selectbox(
                 "เลือกทางเลือกที่ต้องการดูรายละเอียด:",
@@ -1348,7 +1097,11 @@ def main():
             st.subheader("1️⃣ ความไวต่ออัตราคิดลด")
             
             ผลอัตราคิดลด, pivot_อัตราคิดลด = วิเคราะห์ความไว_อัตราคิดลด(
-                st.session_state.ทางเลือกทั้งหมด, ระยะวิเคราะห์, อัตราคิดลด, ช่วงอัตราคิดลด
+                st.session_state.ทางเลือกทั้งหมด,
+                ระยะวิเคราะห์,
+                อัตราคิดลด,
+                ช่วงอัตราคิดลด,
+                รวมมูลค่าซาก
             )
             
             if len(ผลอัตราคิดลด) > 0:
@@ -1424,7 +1177,31 @@ def main():
         | ค่าบำรุงรักษา | สูง | ปานกลาง | ต่ำ |
         | อายุใช้งาน | 20-30 ปี | 25-35 ปี | 30-40 ปี |
         
-        ## 4. เอกสารอ้างอิง
+        ## 4. มูลค่าซาก (Salvage Value)
+        
+        มูลค่าซากคือมูลค่าที่เหลืออยู่ของผิวทางเมื่อสิ้นสุดระยะเวลาวิเคราะห์ 
+        การคำนวณมูลค่าซากช่วยให้การเปรียบเทียบยุติธรรมมากขึ้น โดยเฉพาะเมื่อ:
+        
+        - ผิวทางแต่ละประเภทมีอายุการใช้งานที่แตกต่างกัน
+        - มีการฟื้นฟูสภาพในปีที่ใกล้สิ้นสุดระยะวิเคราะห์
+        
+        วิธีคำนวณ (Straight-Line Depreciation):
+        
+        1. หามูลค่าที่ลดลงต่อปี = (ต้นทุนฟื้นฟู × (1 - ร้อยละมูลค่าซาก/100)) / อายุใช้งาน
+        2. มูลค่าซาก = ต้นทุนฟื้นฟู - (มูลค่าที่ลดลงต่อปี × จำนวนปีที่ใช้งาน)
+        
+        ## 5. คำแนะนำในการใช้งาน
+        
+        ### 📤 การ Upload ข้อมูล
+        1. ดาวน์โหลด Template Excel จาก Sidebar
+        2. กรอกข้อมูลต้นทุนก่อสร้างในคอลัมน์ "ต้นทุนก่อสร้าง (บาท/ตร.ม.)"
+        3. อัปโหลดไฟล์กลับมา ระบบจะอัพเดทค่าอัตโนมัติ
+        
+        ### 💰 การใช้งาน Toggle มูลค่าซาก
+        - **เปิด**: คำนวณมูลค่าซากและหักออกจากต้นทุนรวม (แนะนำ)
+        - **ปิด**: ไม่คำนวณมูลค่าซาก (กรณีต้องการเปรียบเทียบต้นทุนเต็มจำนวน)
+        
+        ## 6. เอกสารอ้างอิง
         
         - FHWA-SA-98-079: Life-Cycle Cost Analysis in Pavement Design
         - AASHTO Guide for Design of Pavement Structures
@@ -1438,8 +1215,14 @@ def main():
     st.divider()
     st.markdown("""
     ---
-    **โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.0** | พัฒนาสำหรับการเรียนการสอนด้านวิศวกรรมทาง  
+    **โปรแกรมวิเคราะห์ LCCA ผิวทาง v2.1** | พัฒนาสำหรับการเรียนการสอนด้านวิศวกรรมทาง  
     ภาควิชาครุศาสตร์โยธา มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ
+    
+    **ฟีเจอร์ใหม่ v2.1:**
+    - 📤 Upload Excel เพื่อกรอกข้อมูลต้นทุนก่อสร้าง
+    - 📥 ดาวน์โหลด Template Excel
+    - 🔄 เปิด/ปิดการคำนวณมูลค่าซาก
+    - ⚡ Fast upload method (ไม่ต้องรอ reload)
     """)
 
 
