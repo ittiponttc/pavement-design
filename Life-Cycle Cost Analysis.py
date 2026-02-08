@@ -759,23 +759,34 @@ def อ่านข้อมูลจาก_excel(uploaded_file) -> Dict[str, fl
     อ่านข้อมูลจากไฟล์ Excel ที่ผู้ใช้ upload
     
     Returns:
-        Dict mapping ชื่อผิวทาง -> ต้นทุนก่อสร้าง
+        Dict mapping ชื่อผิวทางเต็ม -> ต้นทุนก่อสร้าง
     """
     try:
         # อ่านไฟล์ Excel โดยข้าม header row
         df = pd.read_excel(uploaded_file, sheet_name='Sheet1', header=1)
         
+        # แมพชื่อย่อกับชื่อเต็มในโปรแกรม
+        ชื่อแมพ = {
+            'AC': 'ผิวทางยืดหยุ่น (AC)',
+            'JPCP': 'JPCP',
+            'JRCP': 'JRCP',
+            'CRCP': 'CRCP'
+        }
+        
         # สร้าง dictionary
         ข้อมูลต้นทุน = {}
         
         for idx, row in df.iterrows():
-            ชื่อ = row['ผิวทาง']
+            ชื่อย่อ = str(row['ผิวทาง']).strip()
             ต้นทุน_str = str(row['ต้นทุนก่อสร้าง (บาท/ตร.ม.)'])
             
             # แปลงเป็นตัวเลข
             try:
                 ต้นทุน = float(ต้นทุน_str.replace(',', ''))
-                ข้อมูลต้นทุน[ชื่อ] = ต้นทุน
+                
+                # ใช้ชื่อเต็มจากแมพ (ถ้ามี) หรือใช้ชื่อย่อ (ถ้าไม่มี)
+                ชื่อเต็ม = ชื่อแมพ.get(ชื่อย่อ, ชื่อย่อ)
+                ข้อมูลต้นทุน[ชื่อเต็ม] = ต้นทุน
             except:
                 continue
         
