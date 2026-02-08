@@ -1052,13 +1052,20 @@ def main():
                 col4, col5, col6 = st.columns(3)
                 
                 with col4:
+                    # Get upload version for dynamic keys
+                    upload_version = st.session_state.get('upload_version', 'default')
+                    uploaded_cost = st.session_state.get('uploaded_cost_data', {})
+                    
+                    # ถ้ามีข้อมูล upload ให้ใช้ข้อมูลนั้น
+                    ต้นทุนเริ่มต้น = uploaded_cost.get(ทางเลือก.ชื่อ, ทางเลือก.ต้นทุนก่อสร้าง)
+                    
                     ต้นทุนใหม่ = st.number_input(
                         "ต้นทุนก่อสร้าง (บาท/ตร.ม.)",
                         min_value=0.0,
                         max_value=10000.0,
-                        value=float(ทางเลือก.ต้นทุนก่อสร้าง),
+                        value=float(ต้นทุนเริ่มต้น),
                         step=100.0,
-                        key=f"cost_{i}"
+                        key=f"cost_{ทางเลือก.ชื่อ}_{upload_version}"  # Dynamic key
                     )
                     ทางเลือก.ต้นทุนก่อสร้าง = ต้นทุนใหม่
                 
